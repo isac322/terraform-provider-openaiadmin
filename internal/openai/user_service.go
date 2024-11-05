@@ -1,6 +1,8 @@
 // Copyright (c) HashiCorp, Inc.
 // SPDX-License-Identifier: MPL-2.0
 
+//go:generate mockgen -package "$GOPACKAGE" -destination "mock_$GOFILE" -source "$GOFILE" -typed
+
 package openai
 
 import (
@@ -13,13 +15,20 @@ import (
 	"github.com/pkg/errors"
 )
 
-// UserService handles operations related to users in the OpenAI admin API.
-type UserService struct {
+type UserService interface {
+	List(ctx context.Context) ([]User, error)
+	Modify(ctx context.Context, userID string, role UserRole, disabled *bool) (*User, error)
+	Retrieve(ctx context.Context, userID string) (*User, error)
+	Delete(ctx context.Context, userID string) error
+}
+
+// sdkUserService handles operations related to users in the OpenAI admin API.
+type sdkUserService struct {
 	client *openai.Client
 }
 
-func NewUserService(client *openai.Client) *UserService {
-	return &UserService{client: client}
+func NewSDKUserService(client *openai.Client) UserService {
+	return sdkUserService{client: client}
 }
 
 // UserRole represents the possible roles of a user.
@@ -62,7 +71,7 @@ type UserListResponse struct {
 }
 
 // List retrieves all users, with optional pagination parameters.
-func (s *UserService) List(ctx context.Context) ([]User, error) {
+func (s sdkUserService) List(ctx context.Context) ([]User, error) {
 	var users []User
 
 	limit := 100
@@ -93,7 +102,7 @@ type UserModifyBody struct {
 }
 
 // Modify updates a user's role or disabled status.
-func (s *UserService) Modify(ctx context.Context, userID string, role UserRole, disabled *bool) (*User, error) {
+func (s sdkUserService) Modify(ctx context.Context, userID string, role UserRole, disabled *bool) (*User, error) {
 	var result User
 	body := UserModifyBody{Role: role, Disabled: disabled}
 	err := s.client.Post(ctx, "/organization/users/"+userID, body, &result)
@@ -105,7 +114,7 @@ func (s *UserService) Modify(ctx context.Context, userID string, role UserRole, 
 }
 
 // Retrieve fetches a user by ID.
-func (s *UserService) Retrieve(ctx context.Context, userID string) (*User, error) {
+func (s sdkUserService) Retrieve(ctx context.Context, userID string) (*User, error) {
 	var result User
 	err := s.client.Get(ctx, "/organization/users/"+userID, nil, &result)
 	if err != nil {
@@ -116,7 +125,7 @@ func (s *UserService) Retrieve(ctx context.Context, userID string) (*User, error
 }
 
 // Delete removes a user by ID.
-func (s *UserService) Delete(ctx context.Context, userID string) error {
+func (s sdkUserService) Delete(ctx context.Context, userID string) error {
 	err := s.client.Delete(ctx, "/organization/users/"+userID, nil, nil)
 	if err != nil {
 		return errors.WithStack(err)

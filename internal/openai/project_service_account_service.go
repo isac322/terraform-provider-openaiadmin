@@ -1,6 +1,8 @@
 // Copyright (c) HashiCorp, Inc.
 // SPDX-License-Identifier: MPL-2.0
 
+//go:generate mockgen -package "$GOPACKAGE" -destination "mock_$GOFILE" -source "$GOFILE" -typed
+
 package openai
 
 import (
@@ -13,13 +15,24 @@ import (
 	"github.com/pkg/errors"
 )
 
-// ProjectServiceAccountService handles operations related to project service accounts in the OpenAI admin API.
-type ProjectServiceAccountService struct {
+type ProjectServiceAccountService interface {
+	List(ctx context.Context, projectID string) ([]ProjectServiceAccount, error)
+	Create(
+		ctx context.Context,
+		projectID, name string,
+		role ProjectServiceAccountRole,
+	) (*ProjectServiceAccountWithAPIKey, error)
+	Retrieve(ctx context.Context, projectID, serviceAccountID string) (*ProjectServiceAccount, error)
+	Delete(ctx context.Context, projectID, serviceAccountID string) error
+}
+
+// sdkProjectServiceAccountService handles operations related to project service accounts in the OpenAI admin API.
+type sdkProjectServiceAccountService struct {
 	client *openai.Client
 }
 
-func NewProjectServiceAccountService(client *openai.Client) *ProjectServiceAccountService {
-	return &ProjectServiceAccountService{client: client}
+func NewSDKProjectServiceAccountService(client *openai.Client) ProjectServiceAccountService {
+	return sdkProjectServiceAccountService{client: client}
 }
 
 // ProjectServiceAccountRole represents the possible roles of a project service account.
@@ -62,7 +75,7 @@ type ProjectServiceAccountListResponse struct {
 }
 
 // List retrieves all service accounts for a project, with optional pagination parameters.
-func (s *ProjectServiceAccountService) List(ctx context.Context, projectID string) ([]ProjectServiceAccount, error) {
+func (s sdkProjectServiceAccountService) List(ctx context.Context, projectID string) ([]ProjectServiceAccount, error) {
 	var accounts []ProjectServiceAccount
 
 	limit := 100
@@ -105,7 +118,7 @@ type ProjectServiceAccountWithAPIKey struct {
 }
 
 // Create adds a new service account to the project.
-func (s *ProjectServiceAccountService) Create(
+func (s sdkProjectServiceAccountService) Create(
 	ctx context.Context,
 	projectID, name string,
 	role ProjectServiceAccountRole,
@@ -121,7 +134,7 @@ func (s *ProjectServiceAccountService) Create(
 }
 
 // Retrieve fetches details of a project service account by its ID.
-func (s *ProjectServiceAccountService) Retrieve(
+func (s sdkProjectServiceAccountService) Retrieve(
 	ctx context.Context,
 	projectID, serviceAccountID string,
 ) (*ProjectServiceAccount, error) {
@@ -140,7 +153,7 @@ func (s *ProjectServiceAccountService) Retrieve(
 }
 
 // Delete removes a service account from the project by its ID.
-func (s *ProjectServiceAccountService) Delete(ctx context.Context, projectID, serviceAccountID string) error {
+func (s sdkProjectServiceAccountService) Delete(ctx context.Context, projectID, serviceAccountID string) error {
 	err := s.client.Delete(
 		ctx,
 		"/organization/projects/"+projectID+"/service_accounts/"+serviceAccountID,

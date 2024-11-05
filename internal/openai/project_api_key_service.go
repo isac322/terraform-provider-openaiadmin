@@ -1,6 +1,8 @@
 // Copyright (c) HashiCorp, Inc.
 // SPDX-License-Identifier: MPL-2.0
 
+//go:generate mockgen -package "$GOPACKAGE" -destination "mock_$GOFILE" -source "$GOFILE" -typed
+
 package openai
 
 import (
@@ -13,13 +15,19 @@ import (
 	"github.com/pkg/errors"
 )
 
-// ProjectAPIKeyService handles operations related to project API keys in the OpenAI admin API.
-type ProjectAPIKeyService struct {
+type ProjectAPIKeyService interface {
+	List(ctx context.Context, projectID string) ([]ProjectAPIKey, error)
+	Retrieve(ctx context.Context, projectID, apiKeyID string) (*ProjectAPIKey, error)
+	Delete(ctx context.Context, projectID, apiKeyID string) error
+}
+
+// sdkProjectAPIKeyService handles operations related to project API keys in the OpenAI admin API.
+type sdkProjectAPIKeyService struct {
 	client *openai.Client
 }
 
-func NewProjectAPIKeyService(client *openai.Client) *ProjectAPIKeyService {
-	return &ProjectAPIKeyService{client: client}
+func NewSDKProjectAPIKeyService(client *openai.Client) ProjectAPIKeyService {
+	return sdkProjectAPIKeyService{client: client}
 }
 
 type ProjectAPIKeyOwner struct {
@@ -70,7 +78,7 @@ type ProjectAPIKeyListResponse struct {
 }
 
 // List retrieves all API keys for a project, with optional pagination parameters.
-func (s *ProjectAPIKeyService) List(ctx context.Context, projectID string) ([]ProjectAPIKey, error) {
+func (s sdkProjectAPIKeyService) List(ctx context.Context, projectID string) ([]ProjectAPIKey, error) {
 	var apiKeys []ProjectAPIKey
 
 	limit := 100
@@ -96,7 +104,7 @@ func (s *ProjectAPIKeyService) List(ctx context.Context, projectID string) ([]Pr
 }
 
 // Retrieve fetches details of a project API key by its ID.
-func (s *ProjectAPIKeyService) Retrieve(ctx context.Context, projectID, apiKeyID string) (*ProjectAPIKey, error) {
+func (s sdkProjectAPIKeyService) Retrieve(ctx context.Context, projectID, apiKeyID string) (*ProjectAPIKey, error) {
 	var result ProjectAPIKey
 	err := s.client.Get(ctx, "/organization/projects/"+projectID+"/api-keys/"+apiKeyID, nil, &result)
 	if err != nil {
@@ -107,7 +115,7 @@ func (s *ProjectAPIKeyService) Retrieve(ctx context.Context, projectID, apiKeyID
 }
 
 // Delete removes an API key from the project by its ID.
-func (s *ProjectAPIKeyService) Delete(ctx context.Context, projectID, apiKeyID string) error {
+func (s sdkProjectAPIKeyService) Delete(ctx context.Context, projectID, apiKeyID string) error {
 	err := s.client.Delete(ctx, "/organization/projects/"+projectID+"/api-keys/"+apiKeyID, nil, nil)
 	if err != nil {
 		return errors.WithStack(err)

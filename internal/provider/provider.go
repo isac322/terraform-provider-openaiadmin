@@ -63,7 +63,7 @@ func (p *OpenAIAdminProvider) Configure(
 		return
 	}
 
-	client := openai.NewClient(data.AdminToken.ValueString(), data.BaseURL.ValueStringPointer())
+	client := openai.NewSDKClient(data.AdminToken.ValueString(), data.BaseURL.ValueStringPointer())
 	resp.DataSourceData = client
 	resp.ResourceData = client
 }

@@ -1,6 +1,8 @@
 // Copyright (c) HashiCorp, Inc.
 // SPDX-License-Identifier: MPL-2.0
 
+//go:generate mockgen -package "$GOPACKAGE" -destination "mock_$GOFILE" -source "$GOFILE" -typed
+
 package openai
 
 import (
@@ -13,12 +15,20 @@ import (
 	"github.com/pkg/errors"
 )
 
-type ProjectUserService struct {
+type ProjectUserService interface {
+	List(ctx context.Context, projectID string) ([]ProjectUser, error)
+	Create(ctx context.Context, projectID, userID string, role ProjectUserRole) (*ProjectUser, error)
+	Retrieve(ctx context.Context, projectID, userID string) (*ProjectUser, error)
+	Modify(ctx context.Context, projectID, userID string, role ProjectUserRole) (*ProjectUser, error)
+	Delete(ctx context.Context, projectID, userID string) error
+}
+
+type sdkProjectUserService struct {
 	client *openai.Client
 }
 
-func NewProjectUserService(client *openai.Client) *ProjectUserService {
-	return &ProjectUserService{client: client}
+func NewSDKProjectUserService(client *openai.Client) ProjectUserService {
+	return sdkProjectUserService{client: client}
 }
 
 type ProjectUserListParams struct {
@@ -48,7 +58,7 @@ type ProjectUserListResponse struct {
 	HasMore bool          `json:"has_more"`
 }
 
-func (s *ProjectUserService) List(ctx context.Context, projectID string) ([]ProjectUser, error) {
+func (s sdkProjectUserService) List(ctx context.Context, projectID string) ([]ProjectUser, error) {
 	var users []ProjectUser
 
 	limit := 100
@@ -78,7 +88,7 @@ type ProjectUserCreateBody struct {
 	Role   ProjectUserRole `json:"role"`
 }
 
-func (s *ProjectUserService) Create(
+func (s sdkProjectUserService) Create(
 	ctx context.Context,
 	projectID, userID string,
 	role ProjectUserRole,
@@ -97,7 +107,7 @@ func (s *ProjectUserService) Create(
 	return &result, nil
 }
 
-func (s *ProjectUserService) Retrieve(
+func (s sdkProjectUserService) Retrieve(
 	ctx context.Context,
 	projectID, userID string,
 ) (*ProjectUser, error) {
@@ -114,7 +124,7 @@ type ProjectUserModifyBody struct {
 	Role ProjectUserRole `json:"role"`
 }
 
-func (s *ProjectUserService) Modify(
+func (s sdkProjectUserService) Modify(
 	ctx context.Context,
 	projectID, userID string,
 	role ProjectUserRole,
@@ -133,7 +143,7 @@ func (s *ProjectUserService) Modify(
 	return &result, nil
 }
 
-func (s *ProjectUserService) Delete(ctx context.Context, projectID, userID string) error {
+func (s sdkProjectUserService) Delete(ctx context.Context, projectID, userID string) error {
 	err := s.client.Delete(
 		ctx,
 		"/organization/projects/"+projectID+"/users/"+userID,

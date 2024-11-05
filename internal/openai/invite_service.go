@@ -1,6 +1,8 @@
 // Copyright (c) HashiCorp, Inc.
 // SPDX-License-Identifier: MPL-2.0
 
+//go:generate mockgen -package "$GOPACKAGE" -destination "mock_$GOFILE" -source "$GOFILE" -typed
+
 package openai
 
 import (
@@ -13,13 +15,20 @@ import (
 	"github.com/pkg/errors"
 )
 
-// InviteService handles operations related to invites in the OpenAI admin API.
-type InviteService struct {
+type InviteService interface {
+	List(ctx context.Context) ([]Invite, error)
+	Create(ctx context.Context, email string, role InviteRole) (*Invite, error)
+	Retrieve(ctx context.Context, inviteID string) (*Invite, error)
+	Delete(ctx context.Context, inviteID string) error
+}
+
+// sdkInviteService handles operations related to invites in the OpenAI admin API.
+type sdkInviteService struct {
 	client *openai.Client
 }
 
-func NewInviteService(client *openai.Client) *InviteService {
-	return &InviteService{client: client}
+func NewSDKInviteService(client *openai.Client) InviteService {
+	return sdkInviteService{client: client}
 }
 
 // InviteStatus represents the possible statuses of an invite.
@@ -72,7 +81,7 @@ type InviteListResponse struct {
 }
 
 // List retrieves all invites, with optional pagination parameters.
-func (s *InviteService) List(ctx context.Context) ([]Invite, error) {
+func (s sdkInviteService) List(ctx context.Context) ([]Invite, error) {
 	var invites []Invite
 
 	limit := 100
@@ -103,7 +112,7 @@ type InviteCreateBody struct {
 }
 
 // Create sends an invite to a new user.
-func (s *InviteService) Create(ctx context.Context, email string, role InviteRole) (*Invite, error) {
+func (s sdkInviteService) Create(ctx context.Context, email string, role InviteRole) (*Invite, error) {
 	var result Invite
 	err := s.client.Post(ctx, "/organization/invites", InviteCreateBody{Email: email, Role: role}, &result)
 	if err != nil {
@@ -114,7 +123,7 @@ func (s *InviteService) Create(ctx context.Context, email string, role InviteRol
 }
 
 // Retrieve fetches an invite by ID.
-func (s *InviteService) Retrieve(ctx context.Context, inviteID string) (*Invite, error) {
+func (s sdkInviteService) Retrieve(ctx context.Context, inviteID string) (*Invite, error) {
 	var result Invite
 	err := s.client.Get(ctx, "/organization/invites/"+inviteID, nil, &result)
 	if err != nil {
@@ -125,7 +134,7 @@ func (s *InviteService) Retrieve(ctx context.Context, inviteID string) (*Invite,
 }
 
 // Delete removes an invite by ID.
-func (s *InviteService) Delete(ctx context.Context, inviteID string) error {
+func (s sdkInviteService) Delete(ctx context.Context, inviteID string) error {
 	err := s.client.Delete(ctx, "/organization/invites/"+inviteID, nil, nil)
 	if err != nil {
 		return errors.WithStack(err)
