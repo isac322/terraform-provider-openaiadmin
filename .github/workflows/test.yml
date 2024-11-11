@@ -81,5 +81,7 @@ jobs:
       - run: go mod download
       - env:
           TF_ACC: "1"
+          OPENAI_ADMIN_TOKEN: ${{ secrets.OPENAI_ADMIN_TOKEN }}
+          OPENAI_TEST_USER_ID: ${{ secrets.OPENAI_TEST_USER_ID }}
         run: go test -v -cover ./internal/provider/
         timeout-minutes: 10
