@@ -17,11 +17,7 @@ import (
 
 type ProjectServiceAccountService interface {
 	List(ctx context.Context, projectID string) ([]ProjectServiceAccount, error)
-	Create(
-		ctx context.Context,
-		projectID, name string,
-		role ProjectServiceAccountRole,
-	) (*ProjectServiceAccountWithAPIKey, error)
+	Create(ctx context.Context, projectID, name string) (*ProjectServiceAccountWithAPIKey, error)
 	Retrieve(ctx context.Context, projectID, serviceAccountID string) (*ProjectServiceAccount, error)
 	Delete(ctx context.Context, projectID, serviceAccountID string) error
 }
@@ -39,8 +35,8 @@ func NewSDKProjectServiceAccountService(client *openai.Client) ProjectServiceAcc
 type ProjectServiceAccountRole string
 
 const (
-	ProjectServiceAccountRoleViewer ProjectServiceAccountRole = "viewer"
-	ProjectServiceAccountRoleEditor ProjectServiceAccountRole = "editor"
+	ProjectServiceAccountRoleMember ProjectServiceAccountRole = "member"
+	ProjectServiceAccountRoleOwner  ProjectServiceAccountRole = "owner"
 	ProjectServiceAccountRoleAdmin  ProjectServiceAccountRole = "admin"
 )
 
@@ -101,8 +97,7 @@ func (s sdkProjectServiceAccountService) List(ctx context.Context, projectID str
 }
 
 type ProjectServiceAccountCreateBody struct {
-	Name string                    `json:"name"`
-	Role ProjectServiceAccountRole `json:"role"`
+	Name string `json:"name"`
 }
 
 type ServiceAccountAPIKey struct {
@@ -121,10 +116,9 @@ type ProjectServiceAccountWithAPIKey struct {
 func (s sdkProjectServiceAccountService) Create(
 	ctx context.Context,
 	projectID, name string,
-	role ProjectServiceAccountRole,
 ) (*ProjectServiceAccountWithAPIKey, error) {
 	var result ProjectServiceAccountWithAPIKey
-	body := ProjectServiceAccountCreateBody{Name: name, Role: role}
+	body := ProjectServiceAccountCreateBody{Name: name}
 	err := s.client.Post(ctx, "/organization/projects/"+projectID+"/service_accounts", body, &result)
 	if err != nil {
 		return nil, errors.WithStack(err)

@@ -6,8 +6,8 @@ package provider
 import (
 	"context"
 	"fmt"
-	"time"
 
+	"github.com/hashicorp/terraform-plugin-framework-timetypes/timetypes"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -15,15 +15,15 @@ import (
 )
 
 type UserDataSource struct {
-	client *openai.Client
+	client openai.Client
 }
 
 type UserDataSourceModel struct {
-	ID        types.String `tfsdk:"id"`
-	Email     types.String `tfsdk:"email"`
-	Role      types.String `tfsdk:"role"`
-	CreatedAt types.String `tfsdk:"created_at"`
-	Disabled  types.Bool   `tfsdk:"disabled"`
+	ID       types.String      `tfsdk:"id"`
+	Email    types.String      `tfsdk:"email"`
+	Role     types.String      `tfsdk:"role"`
+	AddedAt  timetypes.RFC3339 `tfsdk:"added_at"`
+	Disabled types.Bool        `tfsdk:"disabled"`
 }
 
 func NewUserDataSource() datasource.DataSource {
@@ -55,7 +55,8 @@ func (d *UserDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, r
 				MarkdownDescription: "The role of the user.",
 				Computed:            true,
 			},
-			"created_at": schema.StringAttribute{
+			"added_at": schema.StringAttribute{
+				CustomType:          timetypes.RFC3339Type{},
 				MarkdownDescription: "The timestamp when the user was created.",
 				Computed:            true,
 			},
@@ -76,11 +77,11 @@ func (d *UserDataSource) Configure(
 		return
 	}
 
-	client, ok := req.ProviderData.(*openai.Client)
+	client, ok := req.ProviderData.(openai.Client)
 	if !ok {
 		resp.Diagnostics.AddError("Unexpected Data Source Configure Type",
 			fmt.Sprintf(
-				"Expected *openai.Client, got: %T. Please report this issue to the provider developers.",
+				"Expected openai.Client, got: %T. Please report this issue to the provider developers.",
 				req.ProviderData,
 			))
 		return
@@ -99,13 +100,13 @@ func (d *UserDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 
 	user, err := d.client.Users.Retrieve(ctx, data.ID.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError("Error reading user", err.Error())
+		resp.Diagnostics.AddError("Error reading user", fmt.Sprintf("%+v", err))
 		return
 	}
 
 	data.Email = types.StringValue(user.Email)
 	data.Role = types.StringValue(string(user.Role))
-	data.CreatedAt = types.StringValue(user.CreatedAt.Format(time.RFC3339))
+	data.AddedAt = timetypes.NewRFC3339TimeValue(user.AddedAt.Time)
 	data.Disabled = types.BoolValue(user.Disabled)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)

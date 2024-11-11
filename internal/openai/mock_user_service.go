@@ -118,18 +118,18 @@ func (c *MockUserServiceListCall) DoAndReturn(f func(context.Context) ([]User, e
 }
 
 // Modify mocks base method.
-func (m *MockUserService) Modify(ctx context.Context, userID string, role UserRole, disabled *bool) (*User, error) {
+func (m *MockUserService) Modify(ctx context.Context, userID string, role UserRole) (*User, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Modify", ctx, userID, role, disabled)
+	ret := m.ctrl.Call(m, "Modify", ctx, userID, role)
 	ret0, _ := ret[0].(*User)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Modify indicates an expected call of Modify.
-func (mr *MockUserServiceMockRecorder) Modify(ctx, userID, role, disabled any) *MockUserServiceModifyCall {
+func (mr *MockUserServiceMockRecorder) Modify(ctx, userID, role any) *MockUserServiceModifyCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Modify", reflect.TypeOf((*MockUserService)(nil).Modify), ctx, userID, role, disabled)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Modify", reflect.TypeOf((*MockUserService)(nil).Modify), ctx, userID, role)
 	return &MockUserServiceModifyCall{Call: call}
 }
 
@@ -145,13 +145,13 @@ func (c *MockUserServiceModifyCall) Return(arg0 *User, arg1 error) *MockUserServ
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockUserServiceModifyCall) Do(f func(context.Context, string, UserRole, *bool) (*User, error)) *MockUserServiceModifyCall {
+func (c *MockUserServiceModifyCall) Do(f func(context.Context, string, UserRole) (*User, error)) *MockUserServiceModifyCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockUserServiceModifyCall) DoAndReturn(f func(context.Context, string, UserRole, *bool) (*User, error)) *MockUserServiceModifyCall {
+func (c *MockUserServiceModifyCall) DoAndReturn(f func(context.Context, string, UserRole) (*User, error)) *MockUserServiceModifyCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

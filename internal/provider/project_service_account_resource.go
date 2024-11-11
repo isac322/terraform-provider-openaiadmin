@@ -6,12 +6,14 @@ package provider
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework-timetypes/timetypes"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -20,24 +22,27 @@ import (
 	"github.com/isac322/terraform-provider-openaiadmin/internal/openai"
 )
 
+// Ensure provider defined types fully satisfy framework interfaces.
+var _ resource.Resource = &ProjectServiceAccountResource{}
+
 type ProjectServiceAccountResource struct {
-	client *openai.Client
+	client openai.Client
 }
 
 type ServiceAccountAPIKeyModel struct {
-	Value     types.String `tfsdk:"value"`
-	Name      types.String `tfsdk:"name"`
-	CreatedAt types.String `tfsdk:"created_at"`
-	ID        types.String `tfsdk:"id"`
+	Value     types.String      `tfsdk:"value"`
+	Name      types.String      `tfsdk:"name"`
+	CreatedAt timetypes.RFC3339 `tfsdk:"created_at"`
+	ID        types.String      `tfsdk:"id"`
 }
 
 type ProjectServiceAccountModel struct {
-	ID        types.String               `tfsdk:"id"`
-	Name      types.String               `tfsdk:"name"`
-	ProjectID types.String               `tfsdk:"project_id"`
-	Role      types.String               `tfsdk:"role"`
-	CreatedAt types.String               `tfsdk:"created_at"`
-	APIKey    *ServiceAccountAPIKeyModel `tfsdk:"api_key"` // API Key 객체로 정의
+	ID        types.String      `tfsdk:"id"`
+	Name      types.String      `tfsdk:"name"`
+	ProjectID types.String      `tfsdk:"project_id"`
+	Role      types.String      `tfsdk:"role"`
+	CreatedAt timetypes.RFC3339 `tfsdk:"created_at"`
+	APIKey    types.Object      `tfsdk:"api_key"`
 }
 
 func NewProjectServiceAccountResource() resource.Resource {
@@ -86,14 +91,10 @@ func (r *ProjectServiceAccountResource) Schema(
 			},
 			"role": schema.StringAttribute{
 				MarkdownDescription: "The role of the project service account.",
-				Required:            true,
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
-				},
+				Computed:            true,
 				Validators: []validator.String{stringvalidator.OneOf(
-					string(openai.ProjectServiceAccountRoleViewer),
-					string(openai.ProjectServiceAccountRoleEditor),
-					string(openai.ProjectServiceAccountRoleAdmin),
+					string(openai.ProjectServiceAccountRoleMember),
+					string(openai.ProjectServiceAccountRoleOwner),
 				)},
 			},
 			"api_key": schema.SingleNestedAttribute{
@@ -104,20 +105,35 @@ func (r *ProjectServiceAccountResource) Schema(
 						MarkdownDescription: "The actual API key value.",
 						Computed:            true,
 						Sensitive:           true,
+						PlanModifiers: []planmodifier.String{
+							stringplanmodifier.UseStateForUnknown(),
+						},
 					},
 					"name": schema.StringAttribute{
 						MarkdownDescription: "The name of the API key.",
 						Computed:            true,
+						PlanModifiers: []planmodifier.String{
+							stringplanmodifier.UseStateForUnknown(),
+						},
 					},
 					"created_at": schema.StringAttribute{
 						CustomType:          timetypes.RFC3339Type{},
 						MarkdownDescription: "The timestamp when the API key was created.",
 						Computed:            true,
+						PlanModifiers: []planmodifier.String{
+							stringplanmodifier.UseStateForUnknown(),
+						},
 					},
 					"id": schema.StringAttribute{
 						MarkdownDescription: "The ID of the API key.",
 						Computed:            true,
+						PlanModifiers: []planmodifier.String{
+							stringplanmodifier.UseStateForUnknown(),
+						},
 					},
+				},
+				PlanModifiers: []planmodifier.Object{
+					objectplanmodifier.UseStateForUnknown(),
 				},
 			},
 		},
@@ -133,12 +149,12 @@ func (r *ProjectServiceAccountResource) Configure(
 		return
 	}
 
-	client, ok := req.ProviderData.(*openai.Client)
+	client, ok := req.ProviderData.(openai.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Resource Configure Type",
 			fmt.Sprintf(
-				"Expected *openai.Client, got: %T. Please report this issue to the provider developers.",
+				"Expected openai.Client, got: %T. Please report this issue to the provider developers.",
 				req.ProviderData,
 			),
 		)
@@ -160,8 +176,8 @@ func (r *ProjectServiceAccountResource) Create(
 		return
 	}
 
-	if err := r.create(ctx, &data); err != nil {
-		resp.Diagnostics.AddError("Error creating project service account", err.Error())
+	r.create(ctx, &data, resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
 		return
 	}
 
@@ -170,27 +186,40 @@ func (r *ProjectServiceAccountResource) Create(
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func (r *ProjectServiceAccountResource) create(ctx context.Context, data *ProjectServiceAccountModel) error {
+func (r *ProjectServiceAccountResource) create(
+	ctx context.Context,
+	data *ProjectServiceAccountModel,
+	diagnostics diag.Diagnostics,
+) {
 	serviceAccount, err := r.client.ProjectServiceAccounts.Create(
 		ctx,
 		data.ProjectID.ValueString(),
 		data.Name.ValueString(),
-		openai.ProjectServiceAccountRole(data.Role.ValueString()),
 	)
 	if err != nil {
-		return err
+		diagnostics.AddError("Error creating project service account", fmt.Sprintf("%+v", err))
+		return
 	}
 
 	data.ID = types.StringValue(serviceAccount.ID)
-	data.CreatedAt = types.StringValue(serviceAccount.CreatedAt.Format(time.RFC3339))
+	data.CreatedAt = timetypes.NewRFC3339TimeValue(serviceAccount.CreatedAt.Time)
 	data.Role = types.StringValue(string(serviceAccount.Role))
-	data.APIKey = &ServiceAccountAPIKeyModel{
-		Value:     types.StringValue(serviceAccount.APIKey.Value),
-		Name:      types.StringPointerValue(serviceAccount.APIKey.Name),
-		CreatedAt: types.StringValue(serviceAccount.APIKey.CreatedAt.Format(time.RFC3339)),
-		ID:        types.StringValue(serviceAccount.APIKey.ID),
-	}
-	return nil
+	var diags diag.Diagnostics
+	data.APIKey, diags = types.ObjectValue(
+		map[string]attr.Type{
+			"value":      types.StringType,
+			"name":       types.StringType,
+			"created_at": timetypes.RFC3339Type{},
+			"id":         types.StringType,
+		},
+		map[string]attr.Value{
+			"value":      types.StringValue(serviceAccount.APIKey.Value),
+			"name":       types.StringPointerValue(serviceAccount.APIKey.Name),
+			"created_at": timetypes.NewRFC3339TimeValue(serviceAccount.APIKey.CreatedAt.Time),
+			"id":         types.StringValue(serviceAccount.APIKey.ID),
+		},
+	)
+	diagnostics.Append(diags...)
 }
 
 func (r *ProjectServiceAccountResource) Read(
@@ -211,13 +240,17 @@ func (r *ProjectServiceAccountResource) Read(
 		data.ID.ValueString(),
 	)
 	if err != nil {
-		resp.Diagnostics.AddError("Error reading project service account", err.Error())
+		if openai.IsNotFoundError(err) {
+			resp.State.RemoveResource(ctx)
+			return
+		}
+		resp.Diagnostics.AddError("Error reading project service account", fmt.Sprintf("%+v", err))
 		return
 	}
 
 	data.Name = types.StringValue(serviceAccount.Name)
 	data.Role = types.StringValue(string(serviceAccount.Role))
-	data.CreatedAt = types.StringValue(serviceAccount.CreatedAt.Format(time.RFC3339))
+	data.CreatedAt = timetypes.NewRFC3339TimeValue(serviceAccount.CreatedAt.Time)
 	// The API Key is not provided when searching, so do not change it.
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -237,12 +270,12 @@ func (r *ProjectServiceAccountResource) Update(
 
 	err := r.client.ProjectServiceAccounts.Delete(ctx, data.ProjectID.ValueString(), data.ID.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError("Error deleting project service account", err.Error())
+		resp.Diagnostics.AddError("Error deleting project service account", fmt.Sprintf("%+v", err))
 		return
 	}
 
-	if err := r.create(ctx, &data); err != nil {
-		resp.Diagnostics.AddError("Error creating project service account", err.Error())
+	r.create(ctx, &data, resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
 		return
 	}
 
@@ -261,13 +294,13 @@ func (r *ProjectServiceAccountResource) Delete(
 	if resp.Diagnostics.HasError() {
 		return
 	}
-
-	if err := r.client.ProjectServiceAccounts.Delete(
+	err := r.client.ProjectServiceAccounts.Delete(
 		ctx,
 		data.ProjectID.ValueString(),
 		data.ID.ValueString(),
-	); err != nil {
-		resp.Diagnostics.AddError("Error deleting project service account", err.Error())
+	)
+	if err != nil && !openai.IsNotFoundError(err) {
+		resp.Diagnostics.AddError("Error deleting project service account", fmt.Sprintf("%+v", err))
 		return
 	}
 

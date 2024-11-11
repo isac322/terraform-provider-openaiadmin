@@ -9,8 +9,8 @@ import (
 	"context"
 	"net/url"
 	"strconv"
-	"time"
 
+	"github.com/isac322/terraform-provider-openaiadmin/internal/utils"
 	"github.com/openai/openai-go"
 	"github.com/pkg/errors"
 )
@@ -41,11 +41,11 @@ const (
 
 // Project represents a project in the OpenAI system.
 type Project struct {
-	ID        string        `json:"id"`
-	Name      string        `json:"name"`
-	CreatedAt time.Time     `json:"created_at"`
-	ArchiveAt time.Time     `json:"archive_at"`
-	Status    ProjectStatus `json:"status"`
+	ID        string               `json:"id"`
+	Name      string               `json:"name"`
+	CreatedAt utils.UnixTimestamp  `json:"created_at"`
+	ArchiveAt *utils.UnixTimestamp `json:"archive_at,omitempty"`
+	Status    ProjectStatus        `json:"status"`
 }
 
 // ProjectListParams represents the query parameters for listing projects.

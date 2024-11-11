@@ -28,7 +28,7 @@ Retrieve details of users by an array of emails.
 
 Read-Only:
 
-- `created_at` (String)
+- `added_at` (String)
 - `disabled` (Boolean)
 - `email` (String)
 - `id` (String)

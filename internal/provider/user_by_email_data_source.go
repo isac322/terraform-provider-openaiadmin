@@ -6,8 +6,8 @@ package provider
 import (
 	"context"
 	"fmt"
-	"time"
 
+	"github.com/hashicorp/terraform-plugin-framework-timetypes/timetypes"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -15,15 +15,15 @@ import (
 )
 
 type UserByEmailDataSource struct {
-	client *openai.Client
+	client openai.Client
 }
 
 type UserByEmailDataSourceModel struct {
-	ID        types.String `tfsdk:"id"`
-	Email     types.String `tfsdk:"email"`
-	Role      types.String `tfsdk:"role"`
-	CreatedAt types.String `tfsdk:"created_at"`
-	Disabled  types.Bool   `tfsdk:"disabled"`
+	ID       types.String      `tfsdk:"id"`
+	Email    types.String      `tfsdk:"email"`
+	Role     types.String      `tfsdk:"role"`
+	AddedAt  timetypes.RFC3339 `tfsdk:"added_at"`
+	Disabled types.Bool        `tfsdk:"disabled"`
 }
 
 func NewUserByEmailDataSource() datasource.DataSource {
@@ -59,7 +59,8 @@ func (d *UserByEmailDataSource) Schema(
 				MarkdownDescription: "The role of the user.",
 				Computed:            true,
 			},
-			"created_at": schema.StringAttribute{
+			"added_at": schema.StringAttribute{
+				CustomType:          timetypes.RFC3339Type{},
 				MarkdownDescription: "The timestamp when the user was created.",
 				Computed:            true,
 			},
@@ -80,11 +81,11 @@ func (d *UserByEmailDataSource) Configure(
 		return
 	}
 
-	client, ok := req.ProviderData.(*openai.Client)
+	client, ok := req.ProviderData.(openai.Client)
 	if !ok {
 		resp.Diagnostics.AddError("Unexpected Data Source Configure Type",
 			fmt.Sprintf(
-				"Expected *openai.Client, got: %T. Please report this issue to the provider developers.",
+				"Expected openai.Client, got: %T. Please report this issue to the provider developers.",
 				req.ProviderData,
 			))
 		return
@@ -103,7 +104,7 @@ func (d *UserByEmailDataSource) Read(ctx context.Context, req datasource.ReadReq
 
 	users, err := d.client.Users.List(ctx)
 	if err != nil {
-		resp.Diagnostics.AddError("Error reading users list", err.Error())
+		resp.Diagnostics.AddError("Error reading users list", fmt.Sprintf("%+v", err))
 		return
 	}
 
@@ -111,10 +112,18 @@ func (d *UserByEmailDataSource) Read(ctx context.Context, req datasource.ReadReq
 		if user.Email == data.Email.ValueString() {
 			data.ID = types.StringValue(user.ID)
 			data.Role = types.StringValue(string(user.Role))
-			data.CreatedAt = types.StringValue(user.CreatedAt.Format(time.RFC3339))
+			data.AddedAt = timetypes.NewRFC3339TimeValue(user.AddedAt.Time)
 			data.Disabled = types.BoolValue(user.Disabled)
 			break
 		}
+	}
+
+	if data.ID.IsNull() {
+		resp.Diagnostics.AddError(
+			"User not found",
+			fmt.Sprintf("No user found with email: %s", data.Email.ValueString()),
+		)
+		return
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)

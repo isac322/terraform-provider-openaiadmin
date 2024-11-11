@@ -17,7 +17,7 @@ import (
 
 type UserService interface {
 	List(ctx context.Context) ([]User, error)
-	Modify(ctx context.Context, userID string, role UserRole, disabled *bool) (*User, error)
+	Modify(ctx context.Context, userID string, role UserRole) (*User, error)
 	Retrieve(ctx context.Context, userID string) (*User, error)
 	Delete(ctx context.Context, userID string) error
 }
@@ -35,17 +35,17 @@ func NewSDKUserService(client *openai.Client) UserService {
 type UserRole string
 
 const (
-	UserRoleMember UserRole = "member"
-	UserRoleAdmin  UserRole = "admin"
+	UserRoleReader UserRole = "reader"
+	UserRoleOwner  UserRole = "owner"
 )
 
 // User represents a user in the OpenAI system.
 type User struct {
-	ID        string              `json:"id"`
-	Email     string              `json:"email"`
-	Role      UserRole            `json:"role"`
-	CreatedAt utils.UnixTimestamp `json:"created_at"`
-	Disabled  bool                `json:"disabled"`
+	ID       string              `json:"id"`
+	Email    string              `json:"email"`
+	Role     UserRole            `json:"role"`
+	AddedAt  utils.UnixTimestamp `json:"added_at"`
+	Disabled bool                `json:"disabled"`
 }
 
 type UserListParams struct {
@@ -97,14 +97,13 @@ func (s sdkUserService) List(ctx context.Context) ([]User, error) {
 }
 
 type UserModifyBody struct {
-	Role     UserRole `json:"role,omitempty"`
-	Disabled *bool    `json:"disabled,omitempty"`
+	Role UserRole `json:"role,omitempty"`
 }
 
 // Modify updates a user's role or disabled status.
-func (s sdkUserService) Modify(ctx context.Context, userID string, role UserRole, disabled *bool) (*User, error) {
+func (s sdkUserService) Modify(ctx context.Context, userID string, role UserRole) (*User, error) {
 	var result User
-	body := UserModifyBody{Role: role, Disabled: disabled}
+	body := UserModifyBody{Role: role}
 	err := s.client.Post(ctx, "/organization/users/"+userID, body, &result)
 	if err != nil {
 		return nil, errors.WithStack(err)

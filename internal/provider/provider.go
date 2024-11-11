@@ -5,6 +5,7 @@ package provider
 
 import (
 	"context"
+	"os"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
@@ -40,12 +41,16 @@ func (p *OpenAIAdminProvider) Schema(_ context.Context, _ provider.SchemaRequest
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"admin_token": schema.StringAttribute{
-				MarkdownDescription: "The Admin API key for the OpenAI API. You can create an API key at https://platform.openai.com/settings/organization/admin-keys. (Required)",
-				Required:            true,
+				MarkdownDescription: "The Admin API key for the OpenAI API. You can create an API key at " +
+					"https://platform.openai.com/settings/organization/admin-keys. " +
+					"Can also be specified with the OPENAI_ADMIN_TOKEN environment variable.",
+				Optional:  true,
+				Sensitive: true,
 			},
 			"base_url": schema.StringAttribute{
-				MarkdownDescription: "The base URL of the OpenAI API. (Default: `https://api.openai.com/v1`)",
-				Optional:            true,
+				MarkdownDescription: "The base URL of the OpenAI API. (Default: `https://api.openai.com/v1`). " +
+					"Can also be specified with the OPENAI_BASE_URL environment variable.",
+				Optional: true,
 			},
 		},
 	}
@@ -63,7 +68,27 @@ func (p *OpenAIAdminProvider) Configure(
 		return
 	}
 
-	client := openai.NewSDKClient(data.AdminToken.ValueString(), data.BaseURL.ValueStringPointer())
+	adminToken := data.AdminToken.ValueString()
+	if adminToken == "" {
+		adminToken = os.Getenv("OPENAI_ADMIN_TOKEN")
+		if adminToken == "" {
+			resp.Diagnostics.AddError(
+				"Missing Admin Token Configuration",
+				"While configuring the provider, the admin token was not found in "+
+					"the OPENAI_ADMIN_TOKEN environment variable or provider configuration block.",
+			)
+			return
+		}
+	}
+
+	baseURL := data.BaseURL.ValueStringPointer()
+	if baseURL == nil {
+		if fromEnv := os.Getenv("OPENAI_BASE_URL"); fromEnv != "" {
+			baseURL = &fromEnv
+		}
+	}
+
+	client := openai.NewSDKClient(adminToken, baseURL)
 	resp.DataSourceData = client
 	resp.ResourceData = client
 }
@@ -73,6 +98,7 @@ func (p *OpenAIAdminProvider) Resources(_ context.Context) []func() resource.Res
 		NewInviteResource,
 		NewProjectServiceAccountResource,
 		NewProjectUserResource,
+		NewProjectResource,
 		NewUserResource,
 	}
 }
@@ -84,6 +110,7 @@ func (p *OpenAIAdminProvider) DataSources(_ context.Context) []func() datasource
 		NewProjectAPIKeyDataSource,
 		NewProjectServiceAccountDataSource,
 		NewProjectUserDataSource,
+		NewProjectDataSource,
 		NewUserDataSource,
 		NewUsersListDataSource,
 		NewUserByEmailDataSource,

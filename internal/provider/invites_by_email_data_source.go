@@ -16,7 +16,7 @@ import (
 )
 
 type InvitesByEmailDataSource struct {
-	client *openai.Client
+	client openai.Client
 }
 
 type InviteData struct {
@@ -100,11 +100,11 @@ func (d *InvitesByEmailDataSource) Configure(
 		return
 	}
 
-	client, ok := req.ProviderData.(*openai.Client)
+	client, ok := req.ProviderData.(openai.Client)
 	if !ok {
 		resp.Diagnostics.AddError("Unexpected Data Source Configure Type",
 			fmt.Sprintf(
-				"Expected *openai.Client, got: %T. Please report this issue to the provider developers.",
+				"Expected openai.Client, got: %T. Please report this issue to the provider developers.",
 				req.ProviderData,
 			))
 		return
@@ -131,7 +131,7 @@ func (d *InvitesByEmailDataSource) Read(
 
 	allInvites, err := d.client.Invites.List(ctx)
 	if err != nil {
-		resp.Diagnostics.AddError("Error reading invites list", err.Error())
+		resp.Diagnostics.AddError("Error reading invites list", fmt.Sprintf("%+v", err))
 		return
 	}
 

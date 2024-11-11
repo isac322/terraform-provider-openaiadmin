@@ -6,8 +6,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"time"
-
 	"github.com/hashicorp/terraform-plugin-framework-timetypes/timetypes"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -25,22 +23,22 @@ func NewProjectAPIKeyDataSource() datasource.DataSource {
 }
 
 type ProjectAPIKeyDataSource struct {
-	client *openai.Client
+	client openai.Client
 }
 
 type ProjectAPIKeyOwnerServiceAccountModel struct {
-	ID        types.String `tfsdk:"id"`
-	Name      types.String `tfsdk:"name"`
-	CreatedAt types.String `tfsdk:"created_at"`
-	Role      types.String `tfsdk:"role"`
+	ID        types.String      `tfsdk:"id"`
+	Name      types.String      `tfsdk:"name"`
+	CreatedAt timetypes.RFC3339 `tfsdk:"created_at"`
+	Role      types.String      `tfsdk:"role"`
 }
 
 type ProjectAPIKeyOwnerUserModel struct {
-	ID        types.String `tfsdk:"id"`
-	Name      types.String `tfsdk:"name"`
-	Email     types.String `tfsdk:"email"`
-	CreatedAt types.String `tfsdk:"created_at"`
-	Role      types.String `tfsdk:"role"`
+	ID        types.String      `tfsdk:"id"`
+	Name      types.String      `tfsdk:"name"`
+	Email     types.String      `tfsdk:"email"`
+	CreatedAt timetypes.RFC3339 `tfsdk:"created_at"`
+	Role      types.String      `tfsdk:"role"`
 }
 
 type ProjectAPIKeyOwnerModel struct {
@@ -50,12 +48,12 @@ type ProjectAPIKeyOwnerModel struct {
 }
 
 type ProjectAPIKeyModel struct {
-	ProjectID     types.String            `tfsdk:"project_id"`
-	ID            types.String            `tfsdk:"id"`
-	Name          types.String            `tfsdk:"name"`
-	RedactedValue types.String            `tfsdk:"redacted_value"`
-	CreatedAt     types.String            `tfsdk:"created_at"`
-	Owner         ProjectAPIKeyOwnerModel `tfsdk:"owner"`
+	ProjectID     types.String             `tfsdk:"project_id"`
+	ID            types.String             `tfsdk:"id"`
+	Name          types.String             `tfsdk:"name"`
+	RedactedValue types.String             `tfsdk:"redacted_value"`
+	CreatedAt     timetypes.RFC3339        `tfsdk:"created_at"`
+	Owner         *ProjectAPIKeyOwnerModel `tfsdk:"owner"`
 }
 
 func (r *ProjectAPIKeyDataSource) Metadata(
@@ -86,7 +84,6 @@ func (r *ProjectAPIKeyDataSource) Schema(
 			"name": schema.StringAttribute{
 				MarkdownDescription: "The name of the project API key.",
 				Computed:            true,
-				Optional:            true,
 			},
 			"redacted_value": schema.StringAttribute{
 				MarkdownDescription: "The redacted value of the project API key.",
@@ -128,9 +125,8 @@ func (r *ProjectAPIKeyDataSource) Schema(
 								MarkdownDescription: "The role of the service account.",
 								Computed:            true,
 								Validators: []validator.String{stringvalidator.OneOf(
-									string(openai.ProjectServiceAccountRoleViewer),
-									string(openai.ProjectServiceAccountRoleEditor),
-									string(openai.ProjectServiceAccountRoleAdmin),
+									string(openai.ProjectServiceAccountRoleMember),
+									string(openai.ProjectServiceAccountRoleOwner),
 								)},
 							},
 						},
@@ -160,8 +156,8 @@ func (r *ProjectAPIKeyDataSource) Schema(
 								MarkdownDescription: "The role of the user.",
 								Computed:            true,
 								Validators: []validator.String{stringvalidator.OneOf(
-									string(openai.UserRoleMember),
-									string(openai.UserRoleAdmin),
+									string(openai.UserRoleReader),
+									string(openai.UserRoleOwner),
 								)},
 							},
 						},
@@ -181,11 +177,11 @@ func (r *ProjectAPIKeyDataSource) Configure(
 		return
 	}
 
-	client, ok := req.ProviderData.(*openai.Client)
+	client, ok := req.ProviderData.(openai.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Resource Configure Type",
-			fmt.Sprintf("Expected *openai.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+			fmt.Sprintf("Expected openai.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
 		return
 	}
@@ -203,13 +199,21 @@ func (r *ProjectAPIKeyDataSource) Read(ctx context.Context, req datasource.ReadR
 
 	apiKey, err := r.client.ProjectAPIKeys.Retrieve(ctx, data.ProjectID.ValueString(), data.ID.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError("Error reading project API key", err.Error())
+		if openai.IsNotFoundError(err) {
+			resp.Diagnostics.AddError(
+				"Project API Key not found",
+				fmt.Sprintf("No project API key found with ID %s.", data.ID.ValueString()),
+			)
+			return
+		}
+		resp.Diagnostics.AddError("Error reading project API key", fmt.Sprintf("%+v", err))
 		return
 	}
 
 	data.Name = types.StringPointerValue(apiKey.Name)
 	data.RedactedValue = types.StringValue(apiKey.RedactedValue)
-	data.CreatedAt = types.StringValue(apiKey.CreatedAt.Format(time.RFC3339))
+	data.CreatedAt = timetypes.NewRFC3339TimeValue(apiKey.CreatedAt.Time)
+	data.Owner = &ProjectAPIKeyOwnerModel{}
 	switch apiKey.Owner.Type {
 	case "user":
 		data.Owner.Type = types.StringValue("user")
@@ -225,7 +229,7 @@ func (r *ProjectAPIKeyDataSource) Read(ctx context.Context, req datasource.ReadR
 			ID:        types.StringValue(apiKey.Owner.User.ID),
 			Name:      types.StringPointerValue(apiKey.Owner.User.Name),
 			Email:     types.StringValue(apiKey.Owner.User.Email),
-			CreatedAt: types.StringValue(apiKey.Owner.User.CreatedAt.Format(time.RFC3339)),
+			CreatedAt: timetypes.NewRFC3339TimeValue(apiKey.Owner.User.CreatedAt.Time),
 			Role:      types.StringValue(string(apiKey.Owner.User.Role)),
 		}
 	case "service_account":
@@ -241,7 +245,7 @@ func (r *ProjectAPIKeyDataSource) Read(ctx context.Context, req datasource.ReadR
 		data.Owner.ServiceAccount = &ProjectAPIKeyOwnerServiceAccountModel{
 			ID:        types.StringValue(apiKey.Owner.ServiceAccount.ID),
 			Name:      types.StringValue(apiKey.Owner.ServiceAccount.Name),
-			CreatedAt: types.StringValue(apiKey.Owner.ServiceAccount.CreatedAt.Format(time.RFC3339)),
+			CreatedAt: timetypes.NewRFC3339TimeValue(apiKey.Owner.ServiceAccount.CreatedAt.Time),
 			Role:      types.StringValue(string(apiKey.Owner.ServiceAccount.Role)),
 		}
 	}

@@ -6,10 +6,11 @@ package provider
 import (
 	"context"
 	"fmt"
-	"time"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-timetypes/timetypes"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -20,18 +21,22 @@ import (
 	"github.com/isac322/terraform-provider-openaiadmin/internal/openai"
 )
 
+// Ensure provider defined types fully satisfy framework interfaces.
+var _ resource.Resource = &ProjectUserResource{}
+var _ resource.ResourceWithImportState = &ProjectUserResource{}
+
 type ProjectUserResource struct {
-	client *openai.Client
+	client openai.Client
 }
 
 type ProjectUserModel struct {
-	ID        types.String `tfsdk:"id"`
-	Name      types.String `tfsdk:"name"`
-	Email     types.String `tfsdk:"email"`
-	ProjectID types.String `tfsdk:"project_id"`
-	UserID    types.String `tfsdk:"user_id"`
-	Role      types.String `tfsdk:"role"`
-	AddedAt   types.String `tfsdk:"added_at"`
+	ID        types.String      `tfsdk:"id"`
+	Name      types.String      `tfsdk:"name"`
+	Email     types.String      `tfsdk:"email"`
+	ProjectID types.String      `tfsdk:"project_id"`
+	UserID    types.String      `tfsdk:"user_id"`
+	Role      types.String      `tfsdk:"role"`
+	AddedAt   timetypes.RFC3339 `tfsdk:"added_at"`
 }
 
 func NewProjectUserResource() resource.Resource {
@@ -52,7 +57,7 @@ func (r *ProjectUserResource) Schema(_ context.Context, _ resource.SchemaRequest
 
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
-				MarkdownDescription: "The ID of the project user.",
+				MarkdownDescription: "The ID of the project user. Format: `{project_id}/{user_id}`",
 				Computed:            true,
 			},
 			"name": schema.StringAttribute{
@@ -102,12 +107,12 @@ func (r *ProjectUserResource) Configure(
 		return
 	}
 
-	client, ok := req.ProviderData.(*openai.Client)
+	client, ok := req.ProviderData.(openai.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Resource Configure Type",
 			fmt.Sprintf(
-				"Expected *openai.Client, got: %T. Please report this issue to the provider developers.",
+				"Expected openai.Client, got: %T. Please report this issue to the provider developers.",
 				req.ProviderData,
 			),
 		)
@@ -133,15 +138,15 @@ func (r *ProjectUserResource) Create(ctx context.Context, req resource.CreateReq
 		openai.ProjectUserRole(data.Role.ValueString()),
 	)
 	if err != nil {
-		resp.Diagnostics.AddError("Error creating project user", err.Error())
+		resp.Diagnostics.AddError("Error creating project user", fmt.Sprintf("%+v", err))
 		return
 	}
 
-	data.ID = types.StringValue(projectUser.ID)
+	data.ID = types.StringValue(fmt.Sprintf("%s/%s", data.ProjectID.ValueString(), data.UserID.ValueString()))
 	data.Name = types.StringValue(projectUser.Name)
 	data.Email = types.StringValue(projectUser.Email)
 	data.Role = types.StringValue(string(projectUser.Role))
-	data.AddedAt = types.StringValue(projectUser.AddedAt.Format(time.RFC3339))
+	data.AddedAt = timetypes.NewRFC3339TimeValue(projectUser.AddedAt.Time)
 
 	tflog.Trace(ctx, "Created a Project User resource")
 
@@ -159,14 +164,19 @@ func (r *ProjectUserResource) Read(ctx context.Context, req resource.ReadRequest
 	// Retrieve project user details
 	projectUser, err := r.client.ProjectUsers.Retrieve(ctx, data.ProjectID.ValueString(), data.UserID.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError("Error reading project user", err.Error())
+		if openai.IsNotFoundError(err) {
+			resp.State.RemoveResource(ctx)
+			return
+		}
+		resp.Diagnostics.AddError("Error reading project user", fmt.Sprintf("%+v", err))
 		return
 	}
 
+	data.ID = types.StringValue(fmt.Sprintf("%s/%s", data.ProjectID.ValueString(), data.UserID.ValueString()))
 	data.Name = types.StringValue(projectUser.Name)
 	data.Email = types.StringValue(projectUser.Email)
 	data.Role = types.StringValue(string(projectUser.Role))
-	data.AddedAt = types.StringValue(projectUser.AddedAt.Format(time.RFC3339))
+	data.AddedAt = timetypes.NewRFC3339TimeValue(projectUser.AddedAt.Time)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -187,11 +197,26 @@ func (r *ProjectUserResource) Update(ctx context.Context, req resource.UpdateReq
 		openai.ProjectUserRole(data.Role.ValueString()),
 	)
 	if err != nil {
-		resp.Diagnostics.AddError("Error updating project user", err.Error())
+		if openai.IsNotFoundError(err) {
+			resp.Diagnostics.AddError(
+				"Cannot update Project User",
+				fmt.Sprintf(
+					"The user %s or project %s was not found. It may have been deleted outside of Terraform.",
+					data.UserID.ValueString(),
+					data.ProjectID.ValueString(),
+				),
+			)
+			return
+		}
+		resp.Diagnostics.AddError("Error updating project user", fmt.Sprintf("%+v", err))
 		return
 	}
 
+	data.ID = types.StringValue(fmt.Sprintf("%s/%s", data.ProjectID.ValueString(), data.UserID.ValueString()))
+	data.Name = types.StringValue(projectUser.Name)
+	data.Email = types.StringValue(projectUser.Email)
 	data.Role = types.StringValue(string(projectUser.Role))
+	data.AddedAt = timetypes.NewRFC3339TimeValue(projectUser.AddedAt.Time)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -204,10 +229,31 @@ func (r *ProjectUserResource) Delete(ctx context.Context, req resource.DeleteReq
 		return
 	}
 
-	if err := r.client.ProjectUsers.Delete(ctx, data.ProjectID.ValueString(), data.UserID.ValueString()); err != nil {
-		resp.Diagnostics.AddError("Error deleting project user", err.Error())
+	err := r.client.ProjectUsers.Delete(ctx, data.ProjectID.ValueString(), data.UserID.ValueString())
+	if err != nil && !openai.IsNotFoundError(err) {
+		resp.Diagnostics.AddError("Error deleting project user", fmt.Sprintf("%+v", err))
 		return
 	}
 
 	resp.State.RemoveResource(ctx)
+}
+
+func (r *ProjectUserResource) ImportState(
+	ctx context.Context,
+	req resource.ImportStateRequest,
+	resp *resource.ImportStateResponse,
+) {
+	// Split the ID into project_id and user_id
+	idParts := strings.Split(req.ID, "/")
+	if len(idParts) != 2 {
+		resp.Diagnostics.AddError(
+			"Invalid ID format",
+			"Expected import ID to be in format: project_id/user_id",
+		)
+		return
+	}
+
+	// Set the split values into state
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("project_id"), idParts[0])...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("user_id"), idParts[1])...)
 }

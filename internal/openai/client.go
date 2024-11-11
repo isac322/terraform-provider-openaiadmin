@@ -6,6 +6,7 @@ package openai
 import (
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
+	"github.com/pkg/errors"
 )
 
 type Client struct {
@@ -32,4 +33,12 @@ func NewSDKClient(apiKey string, baseURL *string) Client {
 		ProjectUsers:           NewSDKProjectUserService(client),
 		Users:                  NewSDKUserService(client),
 	}
+}
+
+func IsNotFoundError(err error) bool {
+	var openaiErr *openai.Error
+	if errors.As(err, &openaiErr) {
+		return openaiErr.StatusCode == 404
+	}
+	return false
 }

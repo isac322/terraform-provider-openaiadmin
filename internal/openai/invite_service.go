@@ -44,8 +44,8 @@ const (
 type InviteRole string
 
 const (
-	InviteRoleMember InviteRole = "member"
-	InviteRoleAdmin  InviteRole = "admin"
+	InviteRoleReader InviteRole = "reader"
+	InviteRoleOwner  InviteRole = "owner"
 )
 
 type Invite struct {

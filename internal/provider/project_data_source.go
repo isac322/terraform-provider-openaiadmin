@@ -6,8 +6,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"time"
-
 	"github.com/hashicorp/terraform-plugin-framework-timetypes/timetypes"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -18,15 +16,15 @@ import (
 )
 
 type ProjectDataSource struct {
-	client openai.ProjectService
+	client openai.Client
 }
 
 type ProjectDataSourceModel struct {
-	ID         types.String `tfsdk:"id"`
-	Name       types.String `tfsdk:"name"`
-	Status     types.String `tfsdk:"status"`
-	CreatedAt  types.String `tfsdk:"created_at"`
-	ArchivedAt types.String `tfsdk:"archived_at"`
+	ID         types.String      `tfsdk:"id"`
+	Name       types.String      `tfsdk:"name"`
+	Status     types.String      `tfsdk:"status"`
+	CreatedAt  timetypes.RFC3339 `tfsdk:"created_at"`
+	ArchivedAt timetypes.RFC3339 `tfsdk:"archived_at"`
 }
 
 func NewProjectDataSource() datasource.DataSource {
@@ -70,7 +68,6 @@ func (d *ProjectDataSource) Schema(_ context.Context, _ datasource.SchemaRequest
 				CustomType:          timetypes.RFC3339Type{},
 				MarkdownDescription: "The timestamp when the project was archived.",
 				Computed:            true,
-				Optional:            true,
 			},
 		},
 	}
@@ -85,7 +82,7 @@ func (d *ProjectDataSource) Configure(
 		return
 	}
 
-	client, ok := req.ProviderData.(openai.ProjectService)
+	client, ok := req.ProviderData.(openai.Client)
 	if !ok {
 		resp.Diagnostics.AddError("Unexpected Data Source Configure Type",
 			fmt.Sprintf(
@@ -106,16 +103,27 @@ func (d *ProjectDataSource) Read(ctx context.Context, req datasource.ReadRequest
 		return
 	}
 
-	project, err := d.client.Retrieve(ctx, data.ID.ValueString())
+	project, err := d.client.Projects.Retrieve(ctx, data.ID.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError("Error reading project", err.Error())
+		if openai.IsNotFoundError(err) {
+			resp.Diagnostics.AddError(
+				"Project not found",
+				fmt.Sprintf("No project found with ID %s.", data.ID.ValueString()),
+			)
+			return
+		}
+		resp.Diagnostics.AddError("Error reading project", fmt.Sprintf("%+v", err))
 		return
 	}
 
 	data.Name = types.StringValue(project.Name)
 	data.Status = types.StringValue(string(project.Status))
-	data.CreatedAt = types.StringValue(project.CreatedAt.Format(time.RFC3339))
-	data.ArchivedAt = types.StringValue(project.ArchiveAt.Format(time.RFC3339))
+	data.CreatedAt = timetypes.NewRFC3339TimeValue(project.CreatedAt.Time)
+	if project.ArchiveAt != nil {
+		data.ArchivedAt = timetypes.NewRFC3339TimeValue(project.ArchiveAt.Time)
+	} else {
+		data.ArchivedAt = timetypes.NewRFC3339Null()
+	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }

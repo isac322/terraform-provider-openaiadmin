@@ -24,6 +24,5 @@ Data source for retrieving details of a project user.
 
 - `added_at` (String) The timestamp when the user was added to the project.
 - `email` (String) The email of the project user.
-- `id` (String) The ID of the project user.
 - `name` (String) The name of the project user.
 - `role` (String) The role of the project user.

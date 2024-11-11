@@ -15,7 +15,7 @@ import (
 )
 
 type InviteDataSource struct {
-	client *openai.Client
+	client openai.Client
 }
 
 type InviteDataSourceModel struct {
@@ -86,11 +86,11 @@ func (d *InviteDataSource) Configure(
 		return
 	}
 
-	client, ok := req.ProviderData.(*openai.Client)
+	client, ok := req.ProviderData.(openai.Client)
 	if !ok {
 		resp.Diagnostics.AddError("Unexpected Data Source Configure Type",
 			fmt.Sprintf(
-				"Expected *openai.Client, got: %T. Please report this issue to the provider developers.",
+				"Expected openai.Client, got: %T. Please report this issue to the provider developers.",
 				req.ProviderData,
 			))
 		return
@@ -109,7 +109,14 @@ func (d *InviteDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 
 	invite, err := d.client.Invites.Retrieve(ctx, data.ID.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError("Error reading invite", err.Error())
+		if openai.IsNotFoundError(err) {
+			resp.Diagnostics.AddError(
+				"Invite not found",
+				fmt.Sprintf("No invite found with ID %s.", data.ID.ValueString()),
+			)
+			return
+		}
+		resp.Diagnostics.AddError("Error reading invite", fmt.Sprintf("%+v", err))
 		return
 	}
 

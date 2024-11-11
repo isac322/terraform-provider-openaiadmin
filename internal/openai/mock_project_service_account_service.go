@@ -41,18 +41,18 @@ func (m *MockProjectServiceAccountService) EXPECT() *MockProjectServiceAccountSe
 }
 
 // Create mocks base method.
-func (m *MockProjectServiceAccountService) Create(ctx context.Context, projectID, name string, role ProjectServiceAccountRole) (*ProjectServiceAccountWithAPIKey, error) {
+func (m *MockProjectServiceAccountService) Create(ctx context.Context, projectID, name string) (*ProjectServiceAccountWithAPIKey, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Create", ctx, projectID, name, role)
+	ret := m.ctrl.Call(m, "Create", ctx, projectID, name)
 	ret0, _ := ret[0].(*ProjectServiceAccountWithAPIKey)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Create indicates an expected call of Create.
-func (mr *MockProjectServiceAccountServiceMockRecorder) Create(ctx, projectID, name, role any) *MockProjectServiceAccountServiceCreateCall {
+func (mr *MockProjectServiceAccountServiceMockRecorder) Create(ctx, projectID, name any) *MockProjectServiceAccountServiceCreateCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockProjectServiceAccountService)(nil).Create), ctx, projectID, name, role)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockProjectServiceAccountService)(nil).Create), ctx, projectID, name)
 	return &MockProjectServiceAccountServiceCreateCall{Call: call}
 }
 
@@ -68,13 +68,13 @@ func (c *MockProjectServiceAccountServiceCreateCall) Return(arg0 *ProjectService
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockProjectServiceAccountServiceCreateCall) Do(f func(context.Context, string, string, ProjectServiceAccountRole) (*ProjectServiceAccountWithAPIKey, error)) *MockProjectServiceAccountServiceCreateCall {
+func (c *MockProjectServiceAccountServiceCreateCall) Do(f func(context.Context, string, string) (*ProjectServiceAccountWithAPIKey, error)) *MockProjectServiceAccountServiceCreateCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockProjectServiceAccountServiceCreateCall) DoAndReturn(f func(context.Context, string, string, ProjectServiceAccountRole) (*ProjectServiceAccountWithAPIKey, error)) *MockProjectServiceAccountServiceCreateCall {
+func (c *MockProjectServiceAccountServiceCreateCall) DoAndReturn(f func(context.Context, string, string) (*ProjectServiceAccountWithAPIKey, error)) *MockProjectServiceAccountServiceCreateCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

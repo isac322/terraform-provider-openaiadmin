@@ -6,30 +6,34 @@ package provider
 import (
 	"context"
 	"fmt"
-	"time"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 
+	"github.com/hashicorp/terraform-plugin-framework-timetypes/timetypes"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/isac322/terraform-provider-openaiadmin/internal/openai"
 )
 
+// Ensure provider defined types fully satisfy framework interfaces.
+var _ resource.Resource = &UserResource{}
+var _ resource.ResourceWithImportState = &UserResource{}
+
 type UserResource struct {
-	client *openai.Client
+	client openai.Client
 }
 
 type UserModel struct {
-	ID        types.String `tfsdk:"id"`
-	Email     types.String `tfsdk:"email"`
-	Role      types.String `tfsdk:"role"`
-	CreatedAt types.String `tfsdk:"created_at"`
-	Disabled  types.Bool   `tfsdk:"disabled"`
+	ID       types.String      `tfsdk:"id"`
+	Email    types.String      `tfsdk:"email"`
+	Role     types.String      `tfsdk:"role"`
+	AddedAt  timetypes.RFC3339 `tfsdk:"added_at"`
+	Disabled types.Bool        `tfsdk:"disabled"`
 }
 
 func NewUserResource() resource.Resource {
@@ -47,9 +51,9 @@ func (r *UserResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				MarkdownDescription: "The ID of the user.",
-				Required:            true,
+				Computed:            true,
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
+					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"email": schema.StringAttribute{
@@ -58,18 +62,23 @@ func (r *UserResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 			},
 			"role": schema.StringAttribute{
 				MarkdownDescription: "The role of the user.",
+				Computed:            true,
 				Optional:            true,
 				Validators: []validator.String{
-					stringvalidator.OneOf(string(openai.UserRoleMember), string(openai.UserRoleAdmin)),
+					stringvalidator.OneOf(string(openai.UserRoleReader), string(openai.UserRoleOwner)),
 				},
+				//PlanModifiers: []planmodifier.String{
+				//	stringplanmodifier.UseStateForUnknown(),
+				//},
 			},
-			"created_at": schema.StringAttribute{
+			"added_at": schema.StringAttribute{
+				CustomType:          timetypes.RFC3339Type{},
 				MarkdownDescription: "The timestamp when the user was created.",
 				Computed:            true,
 			},
 			"disabled": schema.BoolAttribute{
 				MarkdownDescription: "Whether the user is disabled.",
-				Optional:            true,
+				Computed:            true,
 			},
 		},
 	}
@@ -80,12 +89,12 @@ func (r *UserResource) Configure(_ context.Context, req resource.ConfigureReques
 		return
 	}
 
-	client, ok := req.ProviderData.(*openai.Client)
+	client, ok := req.ProviderData.(openai.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Resource Configure Type",
 			fmt.Sprintf(
-				"Expected *openai.Client, got: %T. Please report this issue to the provider developers.",
+				"Expected openai.Client, got: %T. Please report this issue to the provider developers.",
 				req.ProviderData,
 			),
 		)
@@ -95,7 +104,7 @@ func (r *UserResource) Configure(_ context.Context, req resource.ConfigureReques
 	r.client = client
 }
 
-func (r *UserResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+func (r *UserResource) Create(_ context.Context, _ resource.CreateRequest, resp *resource.CreateResponse) {
 	resp.Diagnostics.AddError(
 		"Cannot Create User",
 		"User creation is not supported by this resource. Please import an existing user instead.",
@@ -112,13 +121,17 @@ func (r *UserResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 
 	user, err := r.client.Users.Retrieve(ctx, data.ID.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError("Error reading user", err.Error())
+		if openai.IsNotFoundError(err) {
+			resp.State.RemoveResource(ctx)
+			return
+		}
+		resp.Diagnostics.AddError("Error reading user", fmt.Sprintf("%+v", err))
 		return
 	}
 
 	data.Email = types.StringValue(user.Email)
 	data.Role = types.StringValue(string(user.Role))
-	data.CreatedAt = types.StringValue(user.CreatedAt.Format(time.RFC3339))
+	data.AddedAt = timetypes.NewRFC3339TimeValue(user.AddedAt.Time)
 	data.Disabled = types.BoolValue(user.Disabled)
 
 	tflog.Trace(ctx, "Retrieved user", map[string]interface{}{
@@ -129,26 +142,43 @@ func (r *UserResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 }
 
 func (r *UserResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var data UserModel
+	var data, state UserModel
 
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	modifiedUser, err := r.client.Users.Modify(
-		ctx,
-		data.ID.ValueString(),
-		openai.UserRole(data.Role.ValueString()),
-		data.Disabled.ValueBoolPointer(),
-	)
-	if err != nil {
-		resp.Diagnostics.AddError("Error updating user", err.Error())
+	// Check if ID is being changed
+	if !data.ID.Equal(state.ID) {
+		resp.Diagnostics.AddError(
+			"Cannot update user ID",
+			"User ID cannot be changed. Please remove the resource and import the new user instead",
+		)
 		return
 	}
 
-	data.Role = types.StringValue(string(modifiedUser.Role))
-	data.Disabled = types.BoolValue(modifiedUser.Disabled)
+	user, err := r.client.Users.Modify(ctx, data.ID.ValueString(), openai.UserRole(data.Role.ValueString()))
+	if err != nil {
+		if openai.IsNotFoundError(err) {
+			resp.Diagnostics.AddError(
+				"Cannot update User",
+				fmt.Sprintf(
+					"The user %s was not found. It may have been deleted outside of Terraform.",
+					data.ID.ValueString(),
+				),
+			)
+			return
+		}
+		resp.Diagnostics.AddError("Error updating user", fmt.Sprintf("%+v", err))
+		return
+	}
+
+	data.Email = types.StringValue(user.Email)
+	data.Role = types.StringValue(string(user.Role))
+	data.AddedAt = timetypes.NewRFC3339TimeValue(user.AddedAt.Time)
+	data.Disabled = types.BoolValue(user.Disabled)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -161,8 +191,8 @@ func (r *UserResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 		return
 	}
 
-	if err := r.client.Users.Delete(ctx, data.ID.ValueString()); err != nil {
-		resp.Diagnostics.AddError("Error deleting user", err.Error())
+	if err := r.client.Users.Delete(ctx, data.ID.ValueString()); err != nil && !openai.IsNotFoundError(err) {
+		resp.Diagnostics.AddError("Error deleting user", fmt.Sprintf("%+v", err))
 		return
 	}
 

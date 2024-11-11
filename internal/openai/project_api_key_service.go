@@ -88,7 +88,7 @@ func (s sdkProjectAPIKeyService) List(ctx context.Context, projectID string) ([]
 
 	for {
 		var result ProjectAPIKeyListResponse
-		err := s.client.Get(ctx, "/organization/projects/"+projectID+"/api-keys", params.URLQuery(), &result)
+		err := s.client.Get(ctx, "/organization/projects/"+projectID+"/api_keys", params.URLQuery(), &result)
 		if err != nil {
 			return nil, errors.WithStack(err)
 		}
@@ -106,7 +106,7 @@ func (s sdkProjectAPIKeyService) List(ctx context.Context, projectID string) ([]
 // Retrieve fetches details of a project API key by its ID.
 func (s sdkProjectAPIKeyService) Retrieve(ctx context.Context, projectID, apiKeyID string) (*ProjectAPIKey, error) {
 	var result ProjectAPIKey
-	err := s.client.Get(ctx, "/organization/projects/"+projectID+"/api-keys/"+apiKeyID, nil, &result)
+	err := s.client.Get(ctx, "/organization/projects/"+projectID+"/api_keys/"+apiKeyID, nil, &result)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -116,7 +116,7 @@ func (s sdkProjectAPIKeyService) Retrieve(ctx context.Context, projectID, apiKey
 
 // Delete removes an API key from the project by its ID.
 func (s sdkProjectAPIKeyService) Delete(ctx context.Context, projectID, apiKeyID string) error {
-	err := s.client.Delete(ctx, "/organization/projects/"+projectID+"/api-keys/"+apiKeyID, nil, nil)
+	err := s.client.Delete(ctx, "/organization/projects/"+projectID+"/api_keys/"+apiKeyID, nil, nil)
 	if err != nil {
 		return errors.WithStack(err)
 	}

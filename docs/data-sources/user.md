@@ -21,7 +21,7 @@ Retrieve details of a specific user by ID.
 
 ### Read-Only
 
-- `created_at` (String) The timestamp when the user was created.
+- `added_at` (String) The timestamp when the user was created.
 - `disabled` (Boolean) Whether the user is disabled.
 - `email` (String) The email of the user.
 - `role` (String) The role of the user.

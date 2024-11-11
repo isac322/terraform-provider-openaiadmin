@@ -19,13 +19,13 @@ Project Service Account resource
 
 - `name` (String) The name of the project service account.
 - `project_id` (String) The ID of the project to which this service account belongs.
-- `role` (String) The role of the project service account.
 
 ### Read-Only
 
 - `api_key` (Attributes) The API key for the service account, available only during creation. (see [below for nested schema](#nestedatt--api_key))
 - `created_at` (String) The timestamp when the service account was created.
 - `id` (String) The ID of the project service account.
+- `role` (String) The role of the project service account.
 
 <a id="nestedatt--api_key"></a>
 ### Nested Schema for `api_key`

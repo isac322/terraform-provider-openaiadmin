@@ -6,7 +6,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework-timetypes/timetypes"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -20,17 +19,16 @@ import (
 
 // ProjectUserDataSource is the data source implementation.
 type ProjectUserDataSource struct {
-	client *openai.Client
+	client openai.Client
 }
 
 type ProjectUserDataSourceModel struct {
-	ID        types.String `tfsdk:"id"`
-	Name      types.String `tfsdk:"name"`
-	Email     types.String `tfsdk:"email"`
-	ProjectID types.String `tfsdk:"project_id"`
-	UserID    types.String `tfsdk:"user_id"`
-	Role      types.String `tfsdk:"role"`
-	AddedAt   types.String `tfsdk:"added_at"`
+	Name      types.String      `tfsdk:"name"`
+	Email     types.String      `tfsdk:"email"`
+	ProjectID types.String      `tfsdk:"project_id"`
+	UserID    types.String      `tfsdk:"user_id"`
+	Role      types.String      `tfsdk:"role"`
+	AddedAt   timetypes.RFC3339 `tfsdk:"added_at"`
 }
 
 func NewProjectUserDataSource() datasource.DataSource {
@@ -50,10 +48,6 @@ func (d *ProjectUserDataSource) Schema(_ context.Context, _ datasource.SchemaReq
 		MarkdownDescription: "Data source for retrieving details of a project user.",
 
 		Attributes: map[string]schema.Attribute{
-			"id": schema.StringAttribute{
-				MarkdownDescription: "The ID of the project user.",
-				Computed:            true,
-			},
 			"name": schema.StringAttribute{
 				MarkdownDescription: "The name of the project user.",
 				Computed:            true,
@@ -95,12 +89,12 @@ func (d *ProjectUserDataSource) Configure(
 		return
 	}
 
-	client, ok := req.ProviderData.(*openai.Client)
+	client, ok := req.ProviderData.(openai.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Data Source Configure Type",
 			fmt.Sprintf(
-				"Expected *openai.Client, got: %T. Please report this issue to the provider developers.",
+				"Expected openai.Client, got: %T. Please report this issue to the provider developers.",
 				req.ProviderData,
 			),
 		)
@@ -122,20 +116,18 @@ func (d *ProjectUserDataSource) Read(ctx context.Context, req datasource.ReadReq
 	// Retrieve project user information
 	projectUser, err := d.client.ProjectUsers.Retrieve(ctx, data.ProjectID.ValueString(), data.UserID.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError("Error reading project user", err.Error())
+		resp.Diagnostics.AddError("Error reading project user", fmt.Sprintf("%+v", err))
 		return
 	}
 
 	// Populate the data source model with retrieved information
-	data.ID = types.StringValue(projectUser.ID)
 	data.Name = types.StringValue(projectUser.Name)
 	data.Email = types.StringValue(projectUser.Email)
 	data.Role = types.StringValue(string(projectUser.Role))
-	data.AddedAt = types.StringValue(projectUser.AddedAt.Format(time.RFC3339))
+	data.AddedAt = timetypes.NewRFC3339TimeValue(projectUser.AddedAt.Time)
 
 	// Log the data source retrieval
 	tflog.Trace(ctx, "Retrieved project user", map[string]interface{}{
-		"id":         data.ID.ValueString(),
 		"project_id": data.ProjectID.ValueString(),
 		"user_id":    data.UserID.ValueString(),
 	})

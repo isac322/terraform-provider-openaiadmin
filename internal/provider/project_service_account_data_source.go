@@ -6,8 +6,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"time"
-
 	"github.com/hashicorp/terraform-plugin-framework-timetypes/timetypes"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -20,15 +18,15 @@ import (
 
 // ProjectServiceAccountDataSource is the data source implementation.
 type ProjectServiceAccountDataSource struct {
-	client *openai.Client
+	client openai.Client
 }
 
 type ProjectServiceAccountDataSourceModel struct {
-	ID        types.String `tfsdk:"id"`
-	Name      types.String `tfsdk:"name"`
-	ProjectID types.String `tfsdk:"project_id"`
-	Role      types.String `tfsdk:"role"`
-	CreatedAt types.String `tfsdk:"created_at"`
+	ID        types.String      `tfsdk:"id"`
+	Name      types.String      `tfsdk:"name"`
+	ProjectID types.String      `tfsdk:"project_id"`
+	Role      types.String      `tfsdk:"role"`
+	CreatedAt timetypes.RFC3339 `tfsdk:"created_at"`
 }
 
 func NewProjectServiceAccountDataSource() datasource.DataSource {
@@ -73,9 +71,8 @@ func (d *ProjectServiceAccountDataSource) Schema(
 				MarkdownDescription: "The role of the project service account.",
 				Computed:            true,
 				Validators: []validator.String{stringvalidator.OneOf(
-					string(openai.ProjectServiceAccountRoleViewer),
-					string(openai.ProjectServiceAccountRoleEditor),
-					string(openai.ProjectServiceAccountRoleAdmin),
+					string(openai.ProjectServiceAccountRoleMember),
+					string(openai.ProjectServiceAccountRoleOwner),
 				)},
 			},
 		},
@@ -91,12 +88,12 @@ func (d *ProjectServiceAccountDataSource) Configure(
 		return
 	}
 
-	client, ok := req.ProviderData.(*openai.Client)
+	client, ok := req.ProviderData.(openai.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Data Source Configure Type",
 			fmt.Sprintf(
-				"Expected *openai.Client, got: %T. Please report this issue to the provider developers.",
+				"Expected openai.Client, got: %T. Please report this issue to the provider developers.",
 				req.ProviderData,
 			),
 		)
@@ -126,14 +123,21 @@ func (d *ProjectServiceAccountDataSource) Read(
 		data.ID.ValueString(),
 	)
 	if err != nil {
-		resp.Diagnostics.AddError("Error reading project service account", err.Error())
+		if openai.IsNotFoundError(err) {
+			resp.Diagnostics.AddError(
+				"Service Account not found",
+				fmt.Sprintf("No service account found with ID %s.", data.ID.ValueString()),
+			)
+			return
+		}
+		resp.Diagnostics.AddError("Error reading project service account", fmt.Sprintf("%+v", err))
 		return
 	}
 
 	// Populate the data source model with retrieved information
 	data.Name = types.StringValue(serviceAccount.Name)
 	data.Role = types.StringValue(string(serviceAccount.Role))
-	data.CreatedAt = types.StringValue(serviceAccount.CreatedAt.Format(time.RFC3339))
+	data.CreatedAt = timetypes.NewRFC3339TimeValue(serviceAccount.CreatedAt.Time)
 
 	// Log the data source retrieval
 	tflog.Trace(

@@ -25,5 +25,5 @@ Project User resource
 
 - `added_at` (String) The timestamp when the user was added to the project.
 - `email` (String) The email of the project user.
-- `id` (String) The ID of the project user.
+- `id` (String) The ID of the project user. Format: `{project_id}/{user_id}`
 - `name` (String) The name of the project user.

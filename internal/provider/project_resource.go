@@ -6,28 +6,34 @@ package provider
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework-timetypes/timetypes"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/isac322/terraform-provider-openaiadmin/internal/openai"
 )
 
+// Ensure provider defined types fully satisfy framework interfaces.
+var _ resource.Resource = &ProjectResource{}
+var _ resource.ResourceWithImportState = &ProjectResource{}
+
 type ProjectResource struct {
-	client openai.ProjectService
+	client openai.Client
 }
 
 type ProjectModel struct {
-	ID         types.String `tfsdk:"id"`
-	Name       types.String `tfsdk:"name"`
-	Status     types.String `tfsdk:"status"`
-	CreatedAt  types.String `tfsdk:"created_at"`
-	ArchivedAt types.String `tfsdk:"archived_at"`
+	ID         types.String      `tfsdk:"id"`
+	Name       types.String      `tfsdk:"name"`
+	Status     types.String      `tfsdk:"status"`
+	CreatedAt  timetypes.RFC3339 `tfsdk:"created_at"`
+	ArchivedAt timetypes.RFC3339 `tfsdk:"archived_at"`
 }
 
 func NewProjectResource() resource.Resource {
@@ -46,6 +52,9 @@ func (r *ProjectResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 			"id": schema.StringAttribute{
 				MarkdownDescription: "The ID of the project.",
 				Computed:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"name": schema.StringAttribute{
 				MarkdownDescription: "The name of the project.",
@@ -57,17 +66,25 @@ func (r *ProjectResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				Validators: []validator.String{
 					stringvalidator.OneOf(string(openai.ProjectStatusActive), string(openai.ProjectStatusArchived)),
 				},
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"created_at": schema.StringAttribute{
 				CustomType:          timetypes.RFC3339Type{},
 				MarkdownDescription: "The timestamp when the project was created.",
 				Computed:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"archived_at": schema.StringAttribute{
 				CustomType:          timetypes.RFC3339Type{},
 				MarkdownDescription: "The timestamp when the project was archived.",
 				Computed:            true,
-				Optional:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 		},
 	}
@@ -82,7 +99,7 @@ func (r *ProjectResource) Configure(
 		return
 	}
 
-	client, ok := req.ProviderData.(openai.ProjectService)
+	client, ok := req.ProviderData.(openai.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Resource Configure Type",
@@ -105,16 +122,20 @@ func (r *ProjectResource) Create(ctx context.Context, req resource.CreateRequest
 		return
 	}
 
-	project, err := r.client.Create(ctx, data.Name.ValueString())
+	project, err := r.client.Projects.Create(ctx, data.Name.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError("Error creating project", err.Error())
+		resp.Diagnostics.AddError("Error creating project", fmt.Sprintf("%+v", err))
 		return
 	}
 
 	data.ID = types.StringValue(project.ID)
 	data.Status = types.StringValue(string(project.Status))
-	data.CreatedAt = types.StringValue(project.CreatedAt.Format(time.RFC3339))
-	data.ArchivedAt = types.StringValue(project.ArchiveAt.Format(time.RFC3339))
+	data.CreatedAt = timetypes.NewRFC3339TimeValue(project.CreatedAt.Time)
+	if project.ArchiveAt != nil {
+		data.ArchivedAt = timetypes.NewRFC3339TimeValue(project.ArchiveAt.Time)
+	} else {
+		data.ArchivedAt = timetypes.NewRFC3339Null()
+	}
 
 	tflog.Trace(ctx, "Created a Project resource")
 
@@ -129,16 +150,20 @@ func (r *ProjectResource) Read(ctx context.Context, req resource.ReadRequest, re
 		return
 	}
 
-	project, err := r.client.Retrieve(ctx, data.ID.ValueString())
+	project, err := r.client.Projects.Retrieve(ctx, data.ID.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError("Error reading project", err.Error())
+		resp.Diagnostics.AddError("Error reading project", fmt.Sprintf("%+v", err))
 		return
 	}
 
 	data.Name = types.StringValue(project.Name)
 	data.Status = types.StringValue(string(project.Status))
-	data.CreatedAt = types.StringValue(project.CreatedAt.Format(time.RFC3339))
-	data.ArchivedAt = types.StringValue(project.ArchiveAt.Format(time.RFC3339))
+	data.CreatedAt = timetypes.NewRFC3339TimeValue(project.CreatedAt.Time)
+	if project.ArchiveAt != nil {
+		data.ArchivedAt = timetypes.NewRFC3339TimeValue(project.ArchiveAt.Time)
+	} else {
+		data.ArchivedAt = timetypes.NewRFC3339Null()
+	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -151,16 +176,20 @@ func (r *ProjectResource) Update(ctx context.Context, req resource.UpdateRequest
 		return
 	}
 
-	project, err := r.client.Modify(ctx, data.ID.ValueString(), data.Name.ValueString())
+	project, err := r.client.Projects.Modify(ctx, data.ID.ValueString(), data.Name.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError("Error updating project", err.Error())
+		resp.Diagnostics.AddError("Error updating project", fmt.Sprintf("%+v", err))
 		return
 	}
 
 	data.Name = types.StringValue(project.Name)
 	data.Status = types.StringValue(string(project.Status))
-	data.CreatedAt = types.StringValue(project.CreatedAt.Format(time.RFC3339))
-	data.ArchivedAt = types.StringValue(project.ArchiveAt.Format(time.RFC3339))
+	data.CreatedAt = timetypes.NewRFC3339TimeValue(project.CreatedAt.Time)
+	if project.ArchiveAt != nil {
+		data.ArchivedAt = timetypes.NewRFC3339TimeValue(project.ArchiveAt.Time)
+	} else {
+		data.ArchivedAt = timetypes.NewRFC3339Null()
+	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -173,11 +202,19 @@ func (r *ProjectResource) Delete(ctx context.Context, req resource.DeleteRequest
 		return
 	}
 
-	err := r.client.Archive(ctx, data.ID.ValueString())
+	err := r.client.Projects.Archive(ctx, data.ID.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError("Error archiving project", err.Error())
+		resp.Diagnostics.AddError("Error archiving project", fmt.Sprintf("%+v", err))
 		return
 	}
 
 	resp.State.RemoveResource(ctx)
+}
+
+func (r *ProjectResource) ImportState(
+	ctx context.Context,
+	req resource.ImportStateRequest,
+	resp *resource.ImportStateResponse,
+) {
+	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }

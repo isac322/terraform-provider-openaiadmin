@@ -6,7 +6,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework-timetypes/timetypes"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -30,17 +29,17 @@ func NewInviteResource() resource.Resource {
 }
 
 type InviteResource struct {
-	client *openai.Client
+	client openai.Client
 }
 
 type InviteModel struct {
-	ID         types.String `tfsdk:"id"`
-	Email      types.String `tfsdk:"email"`
-	Role       types.String `tfsdk:"role"`
-	Status     types.String `tfsdk:"status"`
-	InvitedAt  types.String `tfsdk:"invited_at"`
-	ExpiresAt  types.String `tfsdk:"expires_at"`
-	AcceptedAt types.String `tfsdk:"accepted_at"`
+	ID         types.String      `tfsdk:"id"`
+	Email      types.String      `tfsdk:"email"`
+	Role       types.String      `tfsdk:"role"`
+	Status     types.String      `tfsdk:"status"`
+	InvitedAt  timetypes.RFC3339 `tfsdk:"invited_at"`
+	ExpiresAt  timetypes.RFC3339 `tfsdk:"expires_at"`
+	AcceptedAt timetypes.RFC3339 `tfsdk:"accepted_at"`
 }
 
 func (r *InviteResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -67,7 +66,7 @@ func (r *InviteResource) Schema(_ context.Context, _ resource.SchemaRequest, res
 				MarkdownDescription: "The role of the invite.",
 				Required:            true,
 				Validators: []validator.String{
-					stringvalidator.OneOf(string(openai.InviteRoleMember), string(openai.InviteRoleAdmin)),
+					stringvalidator.OneOf(string(openai.InviteRoleReader), string(openai.InviteRoleOwner)),
 				},
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
@@ -109,12 +108,12 @@ func (r *InviteResource) Configure(_ context.Context, req resource.ConfigureRequ
 		return
 	}
 
-	client, ok := req.ProviderData.(*openai.Client)
+	client, ok := req.ProviderData.(openai.Client)
 
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected *http.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+			fmt.Sprintf("Expected openai.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
 		return
 	}
@@ -132,7 +131,7 @@ func (r *InviteResource) Create(ctx context.Context, req resource.CreateRequest,
 	}
 
 	if err := r.createInvite(ctx, &data); err != nil {
-		resp.Diagnostics.AddError("Error creating invite", err.Error())
+		resp.Diagnostics.AddError("Error creating invite", fmt.Sprintf("%+v", err))
 		return
 	}
 
@@ -148,10 +147,10 @@ func (r *InviteResource) createInvite(ctx context.Context, data *InviteModel) er
 	// Convert role to InviteRole type
 	var role openai.InviteRole
 	switch data.Role.ValueString() {
-	case string(openai.InviteRoleMember):
-		role = openai.InviteRoleMember
-	case string(openai.InviteRoleAdmin):
-		role = openai.InviteRoleAdmin
+	case string(openai.InviteRoleReader):
+		role = openai.InviteRoleReader
+	case string(openai.InviteRoleOwner):
+		role = openai.InviteRoleOwner
 	default:
 		return fmt.Errorf("role %s is not valid", data.Role.ValueString())
 	}
@@ -163,12 +162,12 @@ func (r *InviteResource) createInvite(ctx context.Context, data *InviteModel) er
 
 	data.ID = types.StringValue(invite.ID)
 	data.Status = types.StringValue(string(invite.Status))
-	data.InvitedAt = types.StringValue(invite.InvitedAt.Format(time.RFC3339))
-	data.ExpiresAt = types.StringValue(invite.ExpiresAt.Format(time.RFC3339))
+	data.InvitedAt = timetypes.NewRFC3339TimeValue(invite.InvitedAt.Time)
+	data.ExpiresAt = timetypes.NewRFC3339TimeValue(invite.ExpiresAt.Time)
 	if invite.AcceptedAt != nil {
-		data.AcceptedAt = types.StringValue(invite.AcceptedAt.Format(time.RFC3339))
+		data.AcceptedAt = timetypes.NewRFC3339TimeValue(invite.AcceptedAt.Time)
 	} else {
-		data.AcceptedAt = types.StringNull()
+		data.AcceptedAt = timetypes.NewRFC3339Null()
 	}
 
 	return nil
@@ -184,19 +183,23 @@ func (r *InviteResource) Read(ctx context.Context, req resource.ReadRequest, res
 
 	invite, err := r.client.Invites.Retrieve(ctx, data.ID.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError("Error reading invite", err.Error())
+		if openai.IsNotFoundError(err) {
+			resp.State.RemoveResource(ctx)
+			return
+		}
+		resp.Diagnostics.AddError("Error reading invite", fmt.Sprintf("%+v", err))
 		return
 	}
 
 	data.Email = types.StringValue(invite.Email)
 	data.Status = types.StringValue(string(invite.Status))
 	data.Role = types.StringValue(string(invite.Role))
-	data.InvitedAt = types.StringValue(invite.InvitedAt.Format(time.RFC3339))
-	data.ExpiresAt = types.StringValue(invite.ExpiresAt.Format(time.RFC3339))
+	data.InvitedAt = timetypes.NewRFC3339TimeValue(invite.InvitedAt.Time)
+	data.ExpiresAt = timetypes.NewRFC3339TimeValue(invite.ExpiresAt.Time)
 	if invite.AcceptedAt != nil {
-		data.AcceptedAt = types.StringValue(invite.AcceptedAt.Format(time.RFC3339))
+		data.AcceptedAt = timetypes.NewRFC3339TimeValue(invite.AcceptedAt.Time)
 	} else {
-		data.AcceptedAt = types.StringNull()
+		data.AcceptedAt = timetypes.NewRFC3339Null()
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -210,13 +213,13 @@ func (r *InviteResource) Update(ctx context.Context, req resource.UpdateRequest,
 		return
 	}
 
-	if err := r.client.Invites.Delete(ctx, data.ID.ValueString()); err != nil {
-		resp.Diagnostics.AddError("Error deleting invite", err.Error())
+	if err := r.client.Invites.Delete(ctx, data.ID.ValueString()); err != nil && !openai.IsNotFoundError(err) {
+		resp.Diagnostics.AddError("Error deleting invite", fmt.Sprintf("%+v", err))
 		return
 	}
 
 	if err := r.createInvite(ctx, &data); err != nil {
-		resp.Diagnostics.AddError("Error creating invite", err.Error())
+		resp.Diagnostics.AddError("Error creating invite", fmt.Sprintf("%+v", err))
 		return
 	}
 
@@ -232,8 +235,8 @@ func (r *InviteResource) Delete(ctx context.Context, req resource.DeleteRequest,
 		return
 	}
 
-	if err := r.client.Invites.Delete(ctx, data.ID.ValueString()); err != nil {
-		resp.Diagnostics.AddError("Error deleting invite", err.Error())
+	if err := r.client.Invites.Delete(ctx, data.ID.ValueString()); err != nil && !openai.IsNotFoundError(err) {
+		resp.Diagnostics.AddError("Error deleting invite", fmt.Sprintf("%+v", err))
 		return
 	}
 

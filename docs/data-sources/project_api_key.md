@@ -20,13 +20,10 @@ Project API Key resource
 - `id` (String) The ID of the project API key.
 - `project_id` (String) The ID of the project.
 
-### Optional
-
-- `name` (String) The name of the project API key.
-
 ### Read-Only
 
 - `created_at` (String) The timestamp when the API key was created.
+- `name` (String) The name of the project API key.
 - `owner` (Attributes) The owner of the project API key. (see [below for nested schema](#nestedatt--owner))
 - `redacted_value` (String) The redacted value of the project API key.
 
