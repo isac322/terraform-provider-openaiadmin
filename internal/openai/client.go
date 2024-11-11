@@ -19,7 +19,7 @@ type Client struct {
 }
 
 func NewSDKClient(apiKey string, baseURL *string) Client {
-	options := []option.RequestOption{option.WithAPIKey(apiKey)}
+	options := []option.RequestOption{option.WithAPIKey(apiKey), option.WithMaxRetries(5)}
 	if baseURL != nil {
 		options = append(options, option.WithBaseURL(*baseURL))
 	}
