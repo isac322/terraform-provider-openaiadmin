@@ -18,7 +18,9 @@ import (
 )
 
 func TestAccProjectUserResource(t *testing.T) {
-	t.Parallel()
+	if os.Getenv("ENV") == "local" {
+		t.Parallel()
+	}
 
 	ctx := context.Background()
 	client := openai.NewSDKClient(os.Getenv("OPENAI_ADMIN_TOKEN"), nil)
@@ -78,7 +80,9 @@ func TestAccProjectUserResource(t *testing.T) {
 }
 
 func TestAccProjectUserResource_InvalidRole(t *testing.T) {
-	t.Parallel()
+	if os.Getenv("ENV") == "local" {
+		t.Parallel()
+	}
 
 	ctx := context.Background()
 	client := openai.NewSDKClient(os.Getenv("OPENAI_ADMIN_TOKEN"), nil)
@@ -113,7 +117,9 @@ func TestAccProjectUserResource_InvalidRole(t *testing.T) {
 }
 
 func TestAccProjectUserResource_UpdateInvalidRole(t *testing.T) {
-	t.Parallel()
+	if os.Getenv("ENV") == "local" {
+		t.Parallel()
+	}
 
 	ctx := context.Background()
 	client := openai.NewSDKClient(os.Getenv("OPENAI_ADMIN_TOKEN"), nil)
@@ -163,7 +169,9 @@ func TestAccProjectUserResource_UpdateInvalidRole(t *testing.T) {
 }
 
 func TestAccProjectUserResource_disappears(t *testing.T) {
-	t.Parallel()
+	if os.Getenv("ENV") == "local" {
+		t.Parallel()
+	}
 
 	ctx := context.Background()
 	client := openai.NewSDKClient(os.Getenv("OPENAI_ADMIN_TOKEN"), nil)

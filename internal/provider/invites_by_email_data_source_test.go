@@ -15,7 +15,9 @@ import (
 )
 
 func TestAccInvitesByEmailDataSource_basic(t *testing.T) {
-	t.Parallel()
+	if os.Getenv("ENV") == "local" {
+		t.Parallel()
+	}
 
 	client := openai.NewSDKClient(os.Getenv("OPENAI_ADMIN_TOKEN"), nil)
 
@@ -50,7 +52,9 @@ func TestAccInvitesByEmailDataSource_basic(t *testing.T) {
 }
 
 func TestAccInvitesByEmailDataSource_noResults(t *testing.T) {
-	t.Parallel()
+	if os.Getenv("ENV") == "local" {
+		t.Parallel()
+	}
 
 	email := generateTestEmail()
 

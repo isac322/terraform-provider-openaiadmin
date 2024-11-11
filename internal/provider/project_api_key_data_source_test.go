@@ -17,7 +17,9 @@ import (
 )
 
 func TestAccProjectAPIKeyDataSource(t *testing.T) {
-	t.Parallel()
+	if os.Getenv("ENV") == "local" {
+		t.Parallel()
+	}
 
 	client := openai.NewSDKClient(os.Getenv("OPENAI_ADMIN_TOKEN"), nil)
 	ctx := context.Background()

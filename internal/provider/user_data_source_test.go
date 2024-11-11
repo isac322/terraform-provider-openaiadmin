@@ -16,7 +16,9 @@ import (
 )
 
 func TestAccUserDataSource(t *testing.T) {
-	t.Parallel()
+	if os.Getenv("ENV") == "local" {
+		t.Parallel()
+	}
 
 	ctx := context.Background()
 	client := openai.NewSDKClient(os.Getenv("OPENAI_ADMIN_TOKEN"), nil)
@@ -45,7 +47,9 @@ func TestAccUserDataSource(t *testing.T) {
 }
 
 func TestAccUserDataSource_NonExistent(t *testing.T) {
-	t.Parallel()
+	if os.Getenv("ENV") == "local" {
+		t.Parallel()
+	}
 
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },

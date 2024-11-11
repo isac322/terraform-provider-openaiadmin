@@ -24,7 +24,9 @@ func generateTestEmail() string {
 }
 
 func TestAccInviteResource_basic(t *testing.T) {
-	t.Parallel()
+	if os.Getenv("ENV") == "local" {
+		t.Parallel()
+	}
 
 	email := generateTestEmail()
 
@@ -65,7 +67,9 @@ func TestAccInviteResource_basic(t *testing.T) {
 }
 
 func TestAccInviteResource_externalDeletion(t *testing.T) {
-	t.Parallel()
+	if os.Getenv("ENV") == "local" {
+		t.Parallel()
+	}
 
 	email := generateTestEmail()
 	client := openai.NewSDKClient(os.Getenv("OPENAI_ADMIN_TOKEN"), nil)
@@ -100,7 +104,9 @@ func TestAccInviteResource_externalDeletion(t *testing.T) {
 }
 
 func TestAccInviteResource_duplicateEmail(t *testing.T) {
-	t.Parallel()
+	if os.Getenv("ENV") == "local" {
+		t.Parallel()
+	}
 
 	email := generateTestEmail()
 	client := openai.NewSDKClient(os.Getenv("OPENAI_ADMIN_TOKEN"), nil)
@@ -130,7 +136,9 @@ func TestAccInviteResource_duplicateEmail(t *testing.T) {
 }
 
 func TestAccInviteResource_multipleRoles(t *testing.T) {
-	t.Parallel()
+	if os.Getenv("ENV") == "local" {
+		t.Parallel()
+	}
 
 	readerEmail := generateTestEmail()
 	ownerEmail := generateTestEmail()

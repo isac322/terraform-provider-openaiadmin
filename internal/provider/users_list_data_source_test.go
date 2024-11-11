@@ -17,7 +17,9 @@ import (
 )
 
 func TestAccUsersListDataSource(t *testing.T) {
-	t.Parallel()
+	if os.Getenv("ENV") == "local" {
+		t.Parallel()
+	}
 
 	ctx := context.Background()
 	client := openai.NewSDKClient(os.Getenv("OPENAI_ADMIN_TOKEN"), nil)

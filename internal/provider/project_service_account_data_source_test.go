@@ -16,7 +16,9 @@ import (
 )
 
 func TestAccProjectServiceAccountDataSource(t *testing.T) {
-	t.Parallel()
+	if os.Getenv("ENV") == "local" {
+		t.Parallel()
+	}
 
 	ctx := context.Background()
 	client := openai.NewSDKClient(os.Getenv("OPENAI_ADMIN_TOKEN"), nil)
@@ -83,7 +85,9 @@ func TestAccProjectServiceAccountDataSource(t *testing.T) {
 }
 
 func TestAccProjectServiceAccountDataSource_NonExistent(t *testing.T) {
-	t.Parallel()
+	if os.Getenv("ENV") == "local" {
+		t.Parallel()
+	}
 
 	projectID := "test-project-id"
 

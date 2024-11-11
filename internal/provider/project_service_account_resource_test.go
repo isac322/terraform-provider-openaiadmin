@@ -17,7 +17,9 @@ import (
 )
 
 func TestAccProjectServiceAccountResource(t *testing.T) {
-	t.Parallel()
+	if os.Getenv("ENV") == "local" {
+		t.Parallel()
+	}
 
 	client := openai.NewSDKClient(os.Getenv("OPENAI_ADMIN_TOKEN"), nil)
 	ctx := context.Background()
@@ -75,7 +77,9 @@ func TestAccProjectServiceAccountResource(t *testing.T) {
 }
 
 func TestAccProjectServiceAccountResource_disappears(t *testing.T) {
-	t.Parallel()
+	if os.Getenv("ENV") == "local" {
+		t.Parallel()
+	}
 
 	client := openai.NewSDKClient(os.Getenv("OPENAI_ADMIN_TOKEN"), nil)
 	ctx := context.Background()
