@@ -70,7 +70,6 @@ func TestAccUsersListDataSource(t *testing.T) {
 	})
 }
 
-// Helper function to check if specific user exists in the list
 func testAccCheckUsersListContainsUser(id, email, role string, disabled bool) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		rs, ok := s.RootModule().Resources["data.openaiadmin_users_list.test"]

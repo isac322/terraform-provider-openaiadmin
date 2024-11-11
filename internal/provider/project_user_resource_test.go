@@ -202,7 +202,6 @@ func TestAccProjectUserResource_disappears(t *testing.T) {
 	})
 }
 
-// Helper function to create the Terraform configuration for testing
 func testAccProjectUserResourceConfig(projectID, userID, role string) string {
 	return fmt.Sprintf(`
 resource "openaiadmin_project_user" "test" {
@@ -213,11 +212,10 @@ resource "openaiadmin_project_user" "test" {
 `, projectID, userID, role)
 }
 
-// Helper function to verify if the Project User exists in OpenAI
 func testAccCheckProjectUserExists(
 	ctx context.Context,
 	client openai.Client,
-	resourceName string,
+	resourceName string, //nolint:unparam
 ) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		// Find the resource in state
@@ -244,7 +242,6 @@ func testAccCheckProjectUserExists(
 	}
 }
 
-// Helper function to verify if the Project User was destroyed
 func testAccCheckProjectUserDestroy(s *terraform.State) error {
 	ctx := context.Background()
 	client := openai.NewSDKClient(os.Getenv("OPENAI_ADMIN_TOKEN"), nil)

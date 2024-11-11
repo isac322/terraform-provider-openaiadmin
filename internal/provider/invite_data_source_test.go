@@ -6,13 +6,13 @@ package provider
 import (
 	"context"
 	"fmt"
-	"github.com/stretchr/testify/require"
 	"os"
 	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/isac322/terraform-provider-openaiadmin/internal/openai"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAccInviteDataSource_basic(t *testing.T) {

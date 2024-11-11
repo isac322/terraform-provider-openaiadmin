@@ -153,7 +153,6 @@ func TestAccInviteResource_multipleRoles(t *testing.T) {
 	})
 }
 
-// CheckDestroy verifies the invite has been deleted
 func testAccCheckInviteDestroy(s *terraform.State) error {
 	client := openai.NewSDKClient(os.Getenv("OPENAI_ADMIN_TOKEN"), nil)
 	ctx := context.Background()

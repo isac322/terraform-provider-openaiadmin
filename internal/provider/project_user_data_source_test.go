@@ -99,7 +99,6 @@ func TestAccProjectUserDataSource_NonExistent(t *testing.T) {
 	})
 }
 
-// Generate test config for the data source
 func testAccProjectUserDataSourceConfig(projectID, userID string) string {
 	return fmt.Sprintf(`
 data "openaiadmin_project_user" "test" {
